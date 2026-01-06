@@ -14,14 +14,9 @@ Workspaces let you pre-configure the sandbox environment with files, dependencie
 
 ## How Workspaces Work
 
-1. You upload a `workspace.tgz` file to your project in the portal
-2. When a session starts, the workspace is extracted to `/workspace/project`
-3. Claude has access to all files in the workspace
-4. Tools can read/write files in the workspace
-
 <Steps>
-  <Step title="Upload">
-    Upload `workspace.tgz` to your project via the Chucky Portal (stored in R2)
+  <Step title="Deploy">
+    Use the Chucky CLI to deploy your workspace files to the cloud
   </Step>
   <Step title="Session Start">
     When a session starts, the workspace is extracted to `/workspace/project`
@@ -31,36 +26,119 @@ Workspaces let you pre-configure the sandbox environment with files, dependencie
   </Step>
 </Steps>
 
-## Creating a Workspace
+## Deploying Workspaces with the CLI
 
-### Step 1: Prepare Files
+### Installation
 
-Create a directory with your workspace files:
+Install the Chucky CLI globally:
 
 ```bash
-mkdir my-workspace
+npm install -g @chucky.cloud/cli
+```
+
+### Authentication
+
+Login with your API key (get it from [app.chucky.cloud](https://app.chucky.cloud)):
+
+```bash
+chucky login
+```
+
+Or set the environment variable:
+
+```bash
+export CHUCKY_API_KEY=ak_live_xxxxx
+```
+
+### Initialize Project
+
+In your workspace directory, initialize a Chucky project:
+
+```bash
 cd my-workspace
-
-# Add your files
-cp -r ../my-project/* .
-echo "Custom configuration" > config.json
+chucky init
 ```
 
-### Step 2: Create Archive
+This creates a `.chucky.json` configuration file:
 
-Package as a tar.gz archive:
+```json
+{
+  "projectId": "proj_xxxxx",
+  "projectName": "my-project",
+  "folder": ".",
+  "hmacKey": "your-hmac-secret"
+}
+```
+
+### Deploy
+
+Deploy your workspace to the cloud:
 
 ```bash
-tar -czvf workspace.tgz -C my-workspace .
+chucky deploy
 ```
 
-### Step 3: Upload
+The CLI automatically:
+- Creates a compressed archive of your files
+- Excludes unnecessary files (node_modules, .git, build artifacts, etc.)
+- Uploads to Chucky's cloud storage
+- Provides a test token for immediate use
 
-Upload via the Chucky Portal:
-1. Go to [app.chucky.cloud](https://app.chucky.cloud)
-2. Select your project
-3. Navigate to Workspace settings
-4. Upload `workspace.tgz`
+### Automatic Exclusions
+
+The CLI automatically excludes these patterns when creating the archive:
+
+- `node_modules/**`
+- `.git/**`
+- `.env`, `.env.*`
+- `*.log`
+- `.DS_Store`, `Thumbs.db`
+- `dist/**`, `build/**`, `.next/**`, `.nuxt/**`
+- `coverage/**`, `.cache/**`
+- `*.tgz`, `*.tar.gz`
+- `.chucky.json`
+
+## CI/CD Integration
+
+### GitHub Actions
+
+The `chucky init` command can generate a GitHub Actions workflow for automatic deployments:
+
+```yaml
+# .github/workflows/chucky-deploy.yml
+name: Deploy to Chucky
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: npm install -g @chucky.cloud/cli
+      - run: chucky deploy
+        env:
+          CHUCKY_API_KEY: ${{ secrets.CHUCKY_API_KEY }}
+```
+
+Add your `CHUCKY_API_KEY` to your repository secrets.
+
+## CLI Commands Reference
+
+| Command | Description |
+|---------|-------------|
+| `chucky login` | Authenticate with your API key |
+| `chucky init` | Initialize a new project in current directory |
+| `chucky deploy` | Deploy workspace to the cloud |
+| `chucky list` | List all your projects |
+| `chucky keys` | Show HMAC key for current project |
+| `chucky config anthropic` | Set Anthropic API key for project |
+| `chucky delete` | Delete a project |
 
 ## Workspace Contents
 
@@ -110,38 +188,32 @@ workspace/
 
 ## Alternative: Git Repositories
 
-Instead of uploading a workspace file, you can configure a Git repository:
+Instead of deploying a workspace, you can configure a Git repository to be cloned on each session:
 
 ### In Portal Settings
 
-```json
-{
-  "git": {
-    "url": "https://github.com/your-org/your-repo.git",
-    "ref": "main",
-    "token": "ghp_xxxxx"  // For private repos
-  }
-}
-```
+Configure Git in your project settings at [app.chucky.cloud](https://app.chucky.cloud):
+
+| Option | Description |
+|--------|-------------|
+| `url` | Repository URL (HTTPS) |
+| `ref` | Branch, tag, or commit (default: `main`) |
+| `token` | Personal access token for private repos |
+| `depth` | Shallow clone depth (default: 1) |
 
 ### Benefits of Git
 
 - **Always up-to-date**: Latest code on each session
 - **Branch selection**: Test different branches
-- **No manual uploads**: Automatic syncing
+- **No manual deploys**: Automatic syncing
 
-### Git Configuration
-
-| Option | Description |
-|--------|-------------|
-| `url` | Repository URL (HTTPS or SSH) |
-| `ref` | Branch, tag, or commit (default: `main`) |
-| `token` | Personal access token for private repos |
-| `depth` | Shallow clone depth (default: 1) |
+<Note>
+  Git clone happens on every session start, so it adds latency. For static content, deployed workspaces are faster.
+</Note>
 
 ## Accessing Workspace Files
 
-### In Tools
+### In Custom Tools
 
 ```typescript
 const readFileTool = tool(
@@ -177,7 +249,7 @@ Claude: "The README contains..."
 
 Session state is saved separately from the workspace:
 
-- **Workspace**: Shared across all users (read-only during session)
+- **Workspace**: Shared across all users (read-only base)
 - **Session state**: Per-user, persists between sessions
 
 Session files are stored at:
@@ -197,22 +269,20 @@ Session files are stored at:
     - Small code samples
 
     **Don't include:**
-    - node_modules
-    - Build artifacts
+    - node_modules (auto-excluded)
+    - Build artifacts (auto-excluded)
     - Large binary files
-    - Unnecessary dependencies
+    - Test fixtures
   </Accordion>
 
-  <Accordion title="Use .gitignore patterns">
-    Before creating the archive, exclude unnecessary files:
+  <Accordion title="Use .chuckyignore">
+    Create a `.chuckyignore` file for project-specific exclusions (same syntax as `.gitignore`):
 
-    ```bash
-    # Create archive excluding common junk
-    tar --exclude='node_modules' \
-        --exclude='.git' \
-        --exclude='dist' \
-        --exclude='*.log' \
-        -czvf workspace.tgz -C my-workspace .
+    ```
+    # Custom exclusions
+    secrets/
+    *.pem
+    large-data/
     ```
   </Accordion>
 
@@ -234,21 +304,15 @@ Session files are stored at:
     ```
   </Accordion>
 
-  <Accordion title="Version your workspaces">
-    Track workspace versions to know what Claude is working with:
-
-    ```bash
-    tar -czvf workspace-v1.2.3.tgz -C my-workspace .
-    ```
+  <Accordion title="Automate with CI/CD">
+    Set up automatic deployments on push to main branch. This ensures Claude always has the latest context.
   </Accordion>
 </AccordionGroup>
 
 ## Example: Documentation Bot
 
-Create a workspace for a documentation assistant:
-
 ```bash
-# Create workspace
+# Create workspace directory
 mkdir doc-workspace
 cd doc-workspace
 
@@ -272,8 +336,9 @@ You are a documentation assistant for the Acme API.
 - Explain concepts from the docs
 EOF
 
-# Package
-tar -czvf ../doc-workspace.tgz .
+# Initialize and deploy
+chucky init
+chucky deploy
 ```
 
 ## Example: Code Review Bot
@@ -282,7 +347,7 @@ tar -czvf ../doc-workspace.tgz .
 mkdir review-workspace
 cd review-workspace
 
-# Copy codebase
+# Copy codebase (without node_modules, .git - auto-excluded)
 cp -r ../my-codebase/* .
 
 # Add review guidelines
@@ -303,5 +368,7 @@ When reviewing code, check for:
 - Use descriptive variable names
 EOF
 
-tar -czvf ../review-workspace.tgz .
+# Initialize and deploy
+chucky init
+chucky deploy
 ```
