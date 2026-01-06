@@ -3,9 +3,9 @@
   "theme": "mint",
   "name": "Chucky SDK",
   "colors": {
-    "primary": "#6366F1",
-    "light": "#818CF8",
-    "dark": "#4F46E5"
+    "primary": "#2DD4BF",
+    "light": "#5EEAD4",
+    "dark": "#14B8A6"
   },
   "favicon": "/favicon.svg",
   "navigation": {
