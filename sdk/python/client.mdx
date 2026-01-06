@@ -1,0 +1,336 @@
+---
+title: Chucky Client
+description: Python SDK client reference
+---
+
+# Chucky Client
+
+The main client class for interacting with Chucky in Python.
+
+## Installation
+
+```bash
+pip install chucky-sdk
+```
+
+Or with Poetry:
+
+```bash
+poetry add chucky-sdk
+```
+
+## Import
+
+```python
+from chucky import Chucky
+```
+
+## Constructor
+
+```python
+client = Chucky(
+    token: str,
+    url: str = 'wss://conjure.chucky.cloud/ws',
+    model: str = 'claude-sonnet-4-5-20250929',
+    system_prompt: Optional[str] = None,
+    max_turns: Optional[int] = None,
+    timeout: float = 30.0,
+    keepalive_interval: float = 60.0,
+)
+```
+
+### Parameters
+
+| Parameter | Type | Required | Default | Description |
+|-----------|------|----------|---------|-------------|
+| `token` | `str` | Yes | - | JWT authentication token |
+| `url` | `str` | No | `'wss://conjure.chucky.cloud/ws'` | WebSocket server URL |
+| `model` | `str` | No | `'claude-sonnet-4-5-20250929'` | Claude model to use |
+| `system_prompt` | `str` | No | `None` | System prompt |
+| `max_turns` | `int` | No | `None` | Max conversation turns |
+| `timeout` | `float` | No | `30.0` | Connection timeout (seconds) |
+| `keepalive_interval` | `float` | No | `60.0` | Keep-alive interval (seconds) |
+
+### Example
+
+```python
+from chucky import Chucky
+
+client = Chucky(
+    token='your-jwt-token',
+    model='claude-sonnet-4-5-20250929',
+    system_prompt='You are a helpful assistant.',
+    timeout=60.0,
+)
+```
+
+## Methods
+
+### prompt()
+
+Send a one-shot prompt and get the response.
+
+```python
+async def prompt(
+    message: str,
+    *,
+    model: Optional[str] = None,
+    system_prompt: Optional[str] = None,
+    tools: Optional[List[Tool]] = None,
+    max_turns: Optional[int] = None,
+) -> PromptResult
+```
+
+#### Parameters
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `message` | `str` | The prompt message |
+| `model` | `str` | Override default model |
+| `system_prompt` | `str` | Override default system prompt |
+| `tools` | `List[Tool]` | Tools available to Claude |
+| `max_turns` | `int` | Max conversation turns |
+
+#### Returns
+
+`PromptResult` with the response.
+
+#### Example
+
+```python
+result = await client.prompt('What is the capital of France?')
+print(result.result)  # "The capital of France is Paris."
+print(result.total_cost_usd)  # 0.0012
+```
+
+---
+
+### stream()
+
+Send a prompt with streaming response.
+
+```python
+async def stream(
+    message: str,
+    *,
+    model: Optional[str] = None,
+    system_prompt: Optional[str] = None,
+    tools: Optional[List[Tool]] = None,
+    max_turns: Optional[int] = None,
+) -> AsyncGenerator[StreamEvent, None]
+```
+
+#### Example
+
+```python
+async for event in client.stream('Write a poem about coding'):
+    if event.type == 'message':
+        print(event.data, end='', flush=True)
+    elif event.type == 'tool_use':
+        print(f'\n[Using tool: {event.name}]')
+```
+
+---
+
+### create_session()
+
+Create a new conversation session.
+
+```python
+async def create_session(
+    *,
+    model: Optional[str] = None,
+    system_prompt: Optional[str] = None,
+    tools: Optional[List[Tool]] = None,
+    mcp_servers: Optional[Dict[str, McpServer]] = None,
+    max_turns: Optional[int] = None,
+) -> Session
+```
+
+#### Example
+
+```python
+session = await client.create_session(
+    model='claude-sonnet-4-5-20250929',
+    system_prompt='You are a math tutor.',
+)
+
+result = await session.send('What is calculus?')
+print(result.result)
+```
+
+---
+
+### session()
+
+Context manager for sessions (recommended).
+
+```python
+def session(
+    *,
+    model: Optional[str] = None,
+    system_prompt: Optional[str] = None,
+    tools: Optional[List[Tool]] = None,
+    mcp_servers: Optional[Dict[str, McpServer]] = None,
+) -> AsyncContextManager[Session]
+```
+
+#### Example
+
+```python
+async with client.session(system_prompt='You are helpful.') as session:
+    r1 = await session.send('Hi, I am Alice')
+    r2 = await session.send('What is my name?')
+    print(r2.result)  # "Your name is Alice."
+# Session automatically closed
+```
+
+---
+
+### close()
+
+Close the client and release resources.
+
+```python
+async def close() -> None
+```
+
+#### Example
+
+```python
+await client.close()
+```
+
+## Session Class
+
+### Methods
+
+#### send()
+
+Send a message and wait for response.
+
+```python
+async def send(message: str) -> SessionResult
+```
+
+#### stream()
+
+Send a message with streaming.
+
+```python
+async def stream(message: str) -> AsyncGenerator[StreamEvent, None]
+```
+
+#### close()
+
+Close the session.
+
+```python
+async def close() -> None
+```
+
+### Properties
+
+#### session_id
+
+The session's unique identifier.
+
+```python
+@property
+def session_id(self) -> Optional[str]
+```
+
+## Result Types
+
+### PromptResult
+
+```python
+@dataclass
+class PromptResult:
+    result: str                      # Response text
+    total_cost_usd: Optional[float]  # Total cost in USD
+    duration_secs: Optional[float]   # Response time
+    session_id: Optional[str]        # Session ID (if applicable)
+```
+
+### SessionResult
+
+```python
+@dataclass
+class SessionResult:
+    result: str
+    total_cost_usd: Optional[float]
+    duration_secs: Optional[float]
+    turn_count: Optional[int]
+    session_id: Optional[str]
+```
+
+### StreamEvent
+
+```python
+@dataclass
+class StreamEvent:
+    type: str       # 'message', 'tool_use', 'tool_result', 'error'
+    data: Any       # Event-specific data
+    name: Optional[str]  # Tool name (for tool_use)
+```
+
+## Complete Example
+
+```python
+import asyncio
+from chucky import Chucky, tool, text_result
+
+# Define a tool
+@tool('get_time', 'Get current time')
+async def get_time() -> ToolResult:
+    from datetime import datetime
+    return text_result(datetime.now().isoformat())
+
+async def main():
+    # Create client
+    client = Chucky(
+        token='your-jwt-token',
+        model='claude-sonnet-4-5-20250929',
+    )
+
+    try:
+        # Simple prompt
+        result = await client.prompt('What is 2 + 2?')
+        print(f'Answer: {result.result}')
+        print(f'Cost: ${result.total_cost_usd:.4f}')
+
+        # Streaming
+        print('\nStreaming response:')
+        async for event in client.stream('Tell me a joke'):
+            if event.type == 'message':
+                print(event.data, end='')
+        print()
+
+        # Session with tools
+        async with client.session(tools=[get_time]) as session:
+            r = await session.send('What time is it?')
+            print(f'\nTime response: {r.result}')
+
+    finally:
+        await client.close()
+
+asyncio.run(main())
+```
+
+## Error Handling
+
+```python
+from chucky import Chucky, BudgetExceededError, AuthenticationError
+
+client = Chucky(token='...')
+
+try:
+    result = await client.prompt('Hello')
+except BudgetExceededError as e:
+    print(f'Budget exceeded: {e}')
+except AuthenticationError as e:
+    print(f'Auth failed: {e}')
+except Exception as e:
+    print(f'Error: {e}')
+```

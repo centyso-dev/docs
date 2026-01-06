@@ -1,0 +1,495 @@
+---
+title: Types
+description: JavaScript/TypeScript SDK type definitions
+---
+
+# Types
+
+Complete type definitions for the JavaScript/TypeScript SDK.
+
+## Client Types
+
+### ClientOptions
+
+```typescript
+interface ClientOptions {
+  token: string;
+  baseUrl?: string;
+  debug?: boolean;
+  timeout?: number;
+  keepAliveInterval?: number;
+  autoReconnect?: boolean;
+  maxReconnectAttempts?: number;
+}
+```
+
+### ConnectionStatus
+
+```typescript
+type ConnectionStatus =
+  | 'disconnected'
+  | 'connecting'
+  | 'connected'
+  | 'reconnecting'
+  | 'error';
+```
+
+### ClientEventHandlers
+
+```typescript
+interface ClientEventHandlers {
+  onConnect?: () => void;
+  onDisconnect?: (reason: string) => void;
+  onReconnect?: (attempt: number) => void;
+  onError?: (error: Error) => void;
+}
+```
+
+## Session Types
+
+### SessionOptions
+
+```typescript
+interface SessionOptions extends BaseOptions {
+  sessionId?: string;
+  forkSession?: string;
+  resumeSessionAt?: string;
+  continue?: boolean;
+  settingSources?: SettingSource[];
+}
+
+type SettingSource = 'user' | 'project' | 'local';
+```
+
+### SessionState
+
+```typescript
+type SessionState =
+  | 'idle'
+  | 'initializing'
+  | 'ready'
+  | 'processing'
+  | 'waiting_tool'
+  | 'completed'
+  | 'error';
+```
+
+### SessionEventHandlers
+
+```typescript
+interface SessionEventHandlers {
+  onSessionInfo?: (info: SessionInfo) => void;
+  onMessage?: (message: Message) => void;
+  onText?: (text: string) => void;
+  onToolUse?: (tool: ToolCall) => void;
+  onToolResult?: (callId: string, result: ToolResult) => void;
+  onThinking?: (thinking: string) => void;
+  onComplete?: (result: SessionResult) => void;
+  onError?: (error: Error) => void;
+}
+```
+
+### SessionInfo
+
+```typescript
+interface SessionInfo {
+  sessionId: string;
+  model: string;
+  created: string;
+}
+```
+
+## Options Types
+
+### BaseOptions
+
+Shared options for sessions and prompts.
+
+```typescript
+interface BaseOptions {
+  // Model
+  model?: string;
+  fallbackModel?: string;
+
+  // System prompt
+  systemPrompt?: string | SystemPromptConfig;
+
+  // Tools
+  tools?: ToolDefinition[];
+  allowedTools?: string[];
+  disallowedTools?: string[];
+  mcpServers?: McpServer[];
+
+  // Limits
+  maxTurns?: number;
+  maxBudgetUsd?: number;
+
+  // Output
+  outputFormat?: OutputFormat;
+
+  // Advanced
+  agents?: AgentConfig[];
+  betas?: string[];
+  permissionMode?: PermissionMode;
+  allowDangerouslySkipPermissions?: boolean;
+  env?: Record<string, string>;
+  includePartialMessages?: boolean;
+  maxThinkingTokens?: number;
+}
+```
+
+### PromptOptions
+
+```typescript
+interface PromptOptions extends BaseOptions {
+  message: string;
+}
+```
+
+### SystemPromptConfig
+
+```typescript
+type SystemPromptConfig =
+  | string
+  | {
+      type: 'preset';
+      preset: 'claude_code';
+      append?: string;
+    };
+```
+
+### OutputFormat
+
+```typescript
+interface OutputFormat {
+  type: 'json_schema';
+  schema: Record<string, unknown>;
+}
+```
+
+### PermissionMode
+
+```typescript
+type PermissionMode = 'default' | 'plan' | 'bypassPermissions';
+```
+
+## Result Types
+
+### SessionResult
+
+```typescript
+interface SessionResult {
+  type: 'result';
+  subtype?: 'success' | 'error' | 'interrupted';
+  text?: string;
+  messages?: Message[];
+  total_cost_usd?: number;
+  duration_secs?: number;
+  turn_count?: number;
+  usage?: Usage;
+  session_id?: string;
+  error?: string;
+}
+```
+
+### PromptResult
+
+```typescript
+interface PromptResult {
+  type: 'result';
+  subtype?: 'success' | 'error';
+  text?: string;
+  output?: unknown;
+  total_cost_usd?: number;
+  duration_secs?: number;
+  usage?: Usage;
+  error?: string;
+}
+```
+
+### Usage
+
+```typescript
+interface Usage {
+  input_tokens: number;
+  output_tokens: number;
+  cache_creation_input_tokens?: number;
+  cache_read_input_tokens?: number;
+}
+```
+
+## Message Types
+
+### Message
+
+```typescript
+interface Message {
+  role: 'user' | 'assistant' | 'system';
+  content: ContentBlock[] | string;
+}
+```
+
+### ContentBlock
+
+```typescript
+type ContentBlock =
+  | TextBlock
+  | ToolUseBlock
+  | ToolResultBlock
+  | ThinkingBlock
+  | ImageBlock;
+
+interface TextBlock {
+  type: 'text';
+  text: string;
+}
+
+interface ToolUseBlock {
+  type: 'tool_use';
+  id: string;
+  name: string;
+  input: Record<string, unknown>;
+}
+
+interface ToolResultBlock {
+  type: 'tool_result';
+  tool_use_id: string;
+  content: ContentBlock[] | string;
+  is_error?: boolean;
+}
+
+interface ThinkingBlock {
+  type: 'thinking';
+  thinking: string;
+}
+
+interface ImageBlock {
+  type: 'image';
+  source: {
+    type: 'base64';
+    media_type: string;
+    data: string;
+  };
+}
+```
+
+## Streaming Types
+
+### StreamingEvent
+
+```typescript
+type StreamingEvent =
+  | StreamingTextEvent
+  | StreamingToolUseEvent
+  | StreamingToolResultEvent
+  | StreamingThinkingEvent
+  | StreamingErrorEvent;
+
+interface StreamingTextEvent {
+  type: 'text';
+  text: string;
+}
+
+interface StreamingToolUseEvent {
+  type: 'tool_use';
+  id: string;
+  name: string;
+  input: Record<string, unknown>;
+}
+
+interface StreamingToolResultEvent {
+  type: 'tool_result';
+  id: string;
+  content: unknown;
+  isError?: boolean;
+}
+
+interface StreamingThinkingEvent {
+  type: 'thinking';
+  thinking: string;
+}
+
+interface StreamingErrorEvent {
+  type: 'error';
+  error: Error;
+}
+```
+
+## Tool Types
+
+### ToolDefinition
+
+```typescript
+interface ToolDefinition {
+  name: string;
+  description: string;
+  inputSchema: ToolInputSchema;
+  executeIn?: 'server' | 'browser';
+  handler?: ToolHandler;
+}
+```
+
+### ToolInputSchema
+
+```typescript
+interface ToolInputSchema {
+  type: 'object';
+  properties: Record<string, PropertySchema>;
+  required?: string[];
+}
+
+interface PropertySchema {
+  type: 'string' | 'number' | 'boolean' | 'array' | 'object';
+  description?: string;
+  enum?: string[];
+  items?: PropertySchema;
+  properties?: Record<string, PropertySchema>;
+  required?: string[];
+  default?: unknown;
+  minimum?: number;
+  maximum?: number;
+}
+```
+
+### ToolHandler
+
+```typescript
+type ToolHandler = (
+  input: Record<string, unknown>
+) => Promise<ToolResult>;
+```
+
+### ToolResult
+
+```typescript
+interface ToolResult {
+  content: ToolContentBlock[];
+  isError?: boolean;
+}
+
+type ToolContentBlock =
+  | { type: 'text'; text: string }
+  | { type: 'image'; data: string; mimeType: string };
+```
+
+### ToolCall
+
+```typescript
+interface ToolCall {
+  id: string;
+  name: string;
+  input: Record<string, unknown>;
+}
+```
+
+## MCP Types
+
+### McpServer
+
+```typescript
+interface McpServer {
+  name: string;
+  version: string;
+  tools: ToolDefinition[];
+}
+```
+
+## Token Types
+
+### CreateTokenOptions
+
+```typescript
+interface CreateTokenOptions {
+  userId: string;
+  projectId: string;
+  secret: string;
+  expiresIn?: number;
+  budget: TokenBudget;
+  permissions?: TokenPermissions;
+  sdkConfig?: TokenSdkConfig;
+}
+```
+
+### TokenBudget
+
+```typescript
+interface TokenBudget {
+  ai: number;
+  compute: number;
+  window: 'hour' | 'day' | 'week' | 'month';
+  windowStart: string;
+}
+```
+
+### TokenPermissions
+
+```typescript
+interface TokenPermissions {
+  tools?: string[];
+  blockedTools?: string[];
+  maxTurns?: number;
+  model?: string;
+}
+```
+
+### TokenSdkConfig
+
+```typescript
+interface TokenSdkConfig {
+  model?: string;
+  systemPrompt?: string;
+  tools?: unknown;
+  allowedTools?: string[];
+  disallowedTools?: string[];
+  maxTurns?: number;
+  maxBudgetUsd?: number;
+  maxThinkingTokens?: number;
+  permissionMode?: string;
+  allowDangerouslySkipPermissions?: boolean;
+  mcpServers?: unknown[];
+  agents?: unknown;
+  betas?: string[];
+  outputFormat?: string;
+  env?: Record<string, string>;
+}
+```
+
+### DecodedToken
+
+```typescript
+interface DecodedToken {
+  sub: string;
+  iss: string;
+  exp: number;
+  iat?: number;
+  budget: TokenBudget;
+  permissions?: TokenPermissions;
+  sdkConfig?: TokenSdkConfig;
+}
+```
+
+## Error Types
+
+### ChuckyError
+
+```typescript
+class ChuckyError extends Error {
+  readonly code: string;
+  readonly details?: Record<string, unknown>;
+}
+```
+
+### Error Codes
+
+```typescript
+type ErrorCode =
+  | 'CONNECTION_ERROR'
+  | 'AUTHENTICATION_ERROR'
+  | 'BUDGET_EXCEEDED'
+  | 'CONCURRENCY_LIMIT'
+  | 'RATE_LIMIT'
+  | 'SESSION_ERROR'
+  | 'TOOL_EXECUTION_ERROR'
+  | 'TIMEOUT'
+  | 'VALIDATION_ERROR';
+```

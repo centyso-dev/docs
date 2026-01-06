@@ -1,0 +1,370 @@
+---
+title: Tools & MCP
+description: Python SDK tools and MCP server reference
+---
+
+# Tools & MCP
+
+Create tools and MCP servers in Python.
+
+## Tool Decorator
+
+The `@tool` decorator is the primary way to create tools in Python.
+
+### Basic Usage
+
+```python
+from chucky import tool, text_result
+
+@tool('greet', 'Greet a person by name')
+async def greet(name: str) -> ToolResult:
+    """
+    Args:
+        name: The name of the person to greet
+    """
+    return text_result(f'Hello, {name}!')
+```
+
+### Signature
+
+```python
+def tool(
+    name: str,
+    description: str,
+    *,
+    schema: Optional[Union[Type[BaseModel], Dict]] = None,
+) -> Callable
+```
+
+### Parameters
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `name` | `str` | Unique tool name |
+| `description` | `str` | What the tool does |
+| `schema` | `BaseModel \| dict` | Optional explicit schema |
+
+## Schema Inference
+
+The decorator automatically infers the JSON schema from:
+1. Function type hints
+2. Docstring (for descriptions)
+3. Default values
+
+### From Type Hints
+
+```python
+from typing import Literal
+
+@tool('search', 'Search for items')
+async def search(
+    query: str,
+    limit: int = 10,
+    sort: Literal['relevance', 'date'] = 'relevance',
+) -> ToolResult:
+    """
+    Args:
+        query: Search query
+        limit: Maximum results (1-100)
+        sort: Sort order
+    """
+    results = await do_search(query, limit, sort)
+    return text_result(str(results))
+```
+
+Generated schema:
+```json
+{
+  "type": "object",
+  "properties": {
+    "query": { "type": "string", "description": "Search query" },
+    "limit": { "type": "integer", "description": "Maximum results (1-100)", "default": 10 },
+    "sort": { "type": "string", "enum": ["relevance", "date"], "description": "Sort order", "default": "relevance" }
+  },
+  "required": ["query"]
+}
+```
+
+### With Pydantic Model
+
+```python
+from pydantic import BaseModel, Field
+
+class WeatherInput(BaseModel):
+    city: str = Field(description='City name')
+    unit: Literal['celsius', 'fahrenheit'] = Field(
+        default='celsius',
+        description='Temperature unit'
+    )
+
+@tool('get_weather', 'Get weather for a city', schema=WeatherInput)
+async def get_weather(args: dict) -> ToolResult:
+    city = args['city']
+    unit = args.get('unit', 'celsius')
+    weather = await fetch_weather(city, unit)
+    return text_result(f'{city}: {weather}')
+```
+
+### With Raw JSON Schema
+
+```python
+@tool('calculate', 'Perform calculation', schema={
+    'type': 'object',
+    'properties': {
+        'expression': {
+            'type': 'string',
+            'description': 'Math expression to evaluate'
+        }
+    },
+    'required': ['expression']
+})
+async def calculate(args: dict) -> ToolResult:
+    result = eval(args['expression'])  # Use safe eval in production
+    return text_result(str(result))
+```
+
+## Result Helpers
+
+### text_result()
+
+Create a text result.
+
+```python
+from chucky import text_result
+
+return text_result('Operation completed')
+```
+
+### error_result()
+
+Create an error result.
+
+```python
+from chucky import error_result
+
+return error_result('File not found')
+```
+
+### ToolResult
+
+Manual result creation:
+
+```python
+from chucky import ToolResult
+
+return ToolResult(
+    content=[
+        {'type': 'text', 'text': 'Some text'},
+        {'type': 'image', 'data': base64_data, 'mimeType': 'image/png'},
+    ],
+    is_error=False,
+)
+```
+
+## MCP Servers
+
+### create_mcp_server()
+
+Create an MCP server from a list of tools.
+
+```python
+from chucky import create_mcp_server, tool, text_result
+
+@tool('read_file', 'Read a file')
+async def read_file(path: str) -> ToolResult:
+    with open(path) as f:
+        return text_result(f.read())
+
+@tool('write_file', 'Write a file')
+async def write_file(path: str, content: str) -> ToolResult:
+    with open(path, 'w') as f:
+        f.write(content)
+    return text_result('File written')
+
+file_server = create_mcp_server('file-tools', [read_file, write_file])
+```
+
+### Using MCP Servers
+
+```python
+client = Chucky(
+    token='...',
+    mcp_servers={'files': file_server},
+)
+
+result = await client.prompt('Read the config.json file')
+```
+
+## Type Annotations
+
+### Supported Types
+
+| Python Type | JSON Schema |
+|-------------|-------------|
+| `str` | `string` |
+| `int` | `integer` |
+| `float` | `number` |
+| `bool` | `boolean` |
+| `List[T]` | `array` |
+| `Dict[str, T]` | `object` |
+| `Optional[T]` | Nullable |
+| `Literal['a', 'b']` | `enum` |
+
+### Complex Types
+
+```python
+from typing import List, Optional, Literal
+
+@tool('process_data', 'Process data items')
+async def process_data(
+    items: List[str],
+    options: Optional[dict] = None,
+    mode: Literal['fast', 'thorough'] = 'fast',
+) -> ToolResult:
+    """
+    Args:
+        items: List of items to process
+        options: Optional processing options
+        mode: Processing mode
+    """
+    # Implementation
+    return text_result('Processed')
+```
+
+## Complete Example
+
+```python
+import asyncio
+from typing import Literal
+from chucky import Chucky, tool, text_result, error_result, create_mcp_server
+
+# Simple tool
+@tool('get_time', 'Get current time')
+async def get_time() -> ToolResult:
+    from datetime import datetime
+    return text_result(datetime.now().isoformat())
+
+# Tool with parameters
+@tool('calculator', 'Perform calculations')
+async def calculator(
+    operation: Literal['add', 'subtract', 'multiply', 'divide'],
+    a: float,
+    b: float,
+) -> ToolResult:
+    """
+    Args:
+        operation: Math operation to perform
+        a: First number
+        b: Second number
+    """
+    if operation == 'add':
+        result = a + b
+    elif operation == 'subtract':
+        result = a - b
+    elif operation == 'multiply':
+        result = a * b
+    elif operation == 'divide':
+        if b == 0:
+            return error_result('Cannot divide by zero')
+        result = a / b
+
+    return text_result(f'{a} {operation} {b} = {result}')
+
+# File tools as MCP server
+@tool('read_file', 'Read a file')
+async def read_file(path: str) -> ToolResult:
+    """
+    Args:
+        path: File path to read
+    """
+    try:
+        with open(path) as f:
+            return text_result(f.read())
+    except FileNotFoundError:
+        return error_result(f'File not found: {path}')
+
+@tool('list_files', 'List files in directory')
+async def list_files(path: str = '.') -> ToolResult:
+    """
+    Args:
+        path: Directory path
+    """
+    import os
+    files = os.listdir(path)
+    return text_result('\n'.join(files))
+
+file_server = create_mcp_server('file-tools', [read_file, list_files])
+
+async def main():
+    client = Chucky(
+        token='your-token',
+        model='claude-sonnet-4-5-20250929',
+    )
+
+    try:
+        # Use individual tools
+        result = await client.prompt(
+            'What time is it and what is 15 times 7?',
+            tools=[get_time, calculator],
+        )
+        print(result.result)
+
+        # Use MCP server
+        async with client.session(mcp_servers={'files': file_server}) as session:
+            r = await session.send('List the files in the current directory')
+            print(r.result)
+
+    finally:
+        await client.close()
+
+asyncio.run(main())
+```
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Use type hints">
+    Always use type hints for automatic schema generation:
+
+    ```python
+    # Good
+    @tool('search', 'Search items')
+    async def search(query: str, limit: int = 10) -> ToolResult:
+        ...
+
+    # Bad - no schema generated
+    @tool('search', 'Search items')
+    async def search(query, limit=10):
+        ...
+    ```
+  </Accordion>
+
+  <Accordion title="Document parameters">
+    Use docstrings to add descriptions:
+
+    ```python
+    @tool('search', 'Search for products')
+    async def search(query: str, category: str = 'all') -> ToolResult:
+        """
+        Args:
+            query: Search keywords
+            category: Product category to filter by
+        """
+        ...
+    ```
+  </Accordion>
+
+  <Accordion title="Handle errors gracefully">
+    Return error results instead of raising exceptions:
+
+    ```python
+    @tool('fetch_data', 'Fetch data from API')
+    async def fetch_data(url: str) -> ToolResult:
+        try:
+            data = await fetch(url)
+            return text_result(data)
+        except Exception as e:
+            return error_result(f'Failed to fetch: {e}')
+    ```
+  </Accordion>
+</AccordionGroup>

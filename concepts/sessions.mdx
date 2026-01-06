@@ -1,0 +1,243 @@
+---
+title: Sessions
+description: Multi-turn conversations with Claude
+---
+
+# Sessions
+
+Sessions enable multi-turn conversations where Claude remembers previous messages. Use sessions for chat interfaces, complex tasks requiring multiple steps, or any scenario where context matters.
+
+## Creating a Session
+
+<CodeGroup>
+```typescript TypeScript
+import { ChuckyClient } from '@chucky.cloud/sdk';
+
+const client = new ChuckyClient({ token });
+
+const session = await client.createSession({
+  model: 'claude-sonnet-4-5-20250929',
+  systemPrompt: 'You are a helpful coding assistant.',
+});
+```
+
+```python Python
+from chucky import Chucky
+
+client = Chucky(token=token)
+
+session = await client.create_session(
+    model='claude-sonnet-4-5-20250929',
+    system_prompt='You are a helpful coding assistant.',
+)
+```
+</CodeGroup>
+
+## Session Options
+
+| Option | Type | Description |
+|--------|------|-------------|
+| `model` | `string` | Claude model to use |
+| `systemPrompt` | `string` | System prompt for the session |
+| `tools` | `Tool[]` | Tools available to Claude |
+| `mcpServers` | `McpServer[]` | MCP servers to connect |
+| `maxTurns` | `number` | Maximum conversation turns |
+| `maxBudgetUsd` | `number` | Budget limit for this session |
+| `sessionId` | `string` | Resume an existing session |
+
+## Sending Messages
+
+### Basic Send
+
+```typescript
+const result = await session.send('What is TypeScript?');
+console.log(result.text);
+```
+
+### Streaming
+
+```typescript
+for await (const event of session.sendStream('Explain async/await')) {
+  switch (event.type) {
+    case 'text':
+      process.stdout.write(event.text);
+      break;
+    case 'tool_use':
+      console.log(`Calling tool: ${event.name}`);
+      break;
+    case 'thinking':
+      console.log(`[Thinking: ${event.thinking}]`);
+      break;
+  }
+}
+```
+
+## Session States
+
+Sessions progress through these states:
+
+```
+idle → initializing → ready ⇄ processing → completed
+                        ↓
+                     error
+```
+
+| State | Description |
+|-------|-------------|
+| `idle` | Created, not connected |
+| `initializing` | Connecting to server |
+| `ready` | Ready to send messages |
+| `processing` | Waiting for response |
+| `waiting_tool` | Waiting for tool result |
+| `completed` | Session finished |
+| `error` | Error occurred |
+
+Check the current state:
+
+```typescript
+console.log(session.state); // 'ready'
+```
+
+## Event Handlers
+
+Listen to session events:
+
+```typescript
+session.on({
+  onSessionInfo: (info) => {
+    console.log('Session started:', info.sessionId);
+  },
+  onText: (text) => {
+    process.stdout.write(text);
+  },
+  onToolUse: (tool) => {
+    console.log(`Tool called: ${tool.name}`, tool.input);
+  },
+  onToolResult: (callId, result) => {
+    console.log(`Tool result for ${callId}:`, result);
+  },
+  onThinking: (thinking) => {
+    console.log('[Thinking]', thinking);
+  },
+  onComplete: (result) => {
+    console.log('Session complete:', result);
+  },
+  onError: (error) => {
+    console.error('Session error:', error);
+  },
+});
+```
+
+## Session Persistence
+
+Sessions are automatically persisted. You can resume them later:
+
+### Get Session ID
+
+```typescript
+const session = await client.createSession({ ... });
+await session.send('Hello!');
+
+// Save the session ID
+const sessionId = session.sessionId;
+console.log('Session ID:', sessionId);
+```
+
+### Resume Session
+
+```typescript
+// Later, resume the session
+const resumedSession = await client.resumeSession(sessionId, {
+  model: 'claude-sonnet-4-5-20250929',
+});
+
+// Continue the conversation
+const result = await resumedSession.send('What did I say before?');
+```
+
+## Closing Sessions
+
+Always close sessions when done to free resources:
+
+```typescript
+await session.close();
+```
+
+Or use try/finally:
+
+```typescript
+const session = await client.createSession({ ... });
+try {
+  await session.send('Hello!');
+  await session.send('How are you?');
+} finally {
+  await session.close();
+}
+```
+
+## Session Results
+
+After each message, you get a `SessionResult`:
+
+```typescript
+interface SessionResult {
+  type: 'result';
+  subtype: 'success' | 'error' | 'interrupted';
+  text?: string;              // Final text response
+  messages?: Message[];       // Full conversation history
+  total_cost_usd?: number;    // Total cost so far
+  duration_secs?: number;     // Response time
+  turn_count?: number;        // Number of turns
+  session_id?: string;        // For resuming
+}
+```
+
+## Prompt Mode vs Session Mode
+
+| Feature | `client.prompt()` | `session.send()` |
+|---------|-------------------|------------------|
+| Stateless | Yes | No |
+| Multi-turn | No | Yes |
+| Resumable | No | Yes |
+| Context | Single message | Full conversation |
+| Use case | One-off questions | Chat, complex tasks |
+
+## Example: Chat Interface
+
+```typescript
+import { ChuckyClient } from '@chucky.cloud/sdk';
+import * as readline from 'readline';
+
+const client = new ChuckyClient({ token });
+const session = await client.createSession({
+  model: 'claude-sonnet-4-5-20250929',
+  systemPrompt: 'You are a helpful assistant.',
+});
+
+const rl = readline.createInterface({
+  input: process.stdin,
+  output: process.stdout,
+});
+
+async function chat() {
+  rl.question('You: ', async (input) => {
+    if (input.toLowerCase() === 'quit') {
+      await session.close();
+      rl.close();
+      return;
+    }
+
+    process.stdout.write('Claude: ');
+    for await (const event of session.sendStream(input)) {
+      if (event.type === 'text') {
+        process.stdout.write(event.text);
+      }
+    }
+    console.log('\n');
+
+    chat();
+  });
+}
+
+chat();
+```

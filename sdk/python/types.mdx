@@ -1,0 +1,432 @@
+---
+title: Types
+description: Python SDK type definitions
+---
+
+# Types
+
+Type definitions for the Python SDK.
+
+## Result Types
+
+### PromptResult
+
+Result from `client.prompt()`.
+
+```python
+@dataclass
+class PromptResult:
+    result: str
+    """The response text"""
+
+    total_cost_usd: Optional[float] = None
+    """Total cost in USD"""
+
+    duration_secs: Optional[float] = None
+    """Response time in seconds"""
+
+    session_id: Optional[str] = None
+    """Session ID (if applicable)"""
+```
+
+#### Example
+
+```python
+result = await client.prompt('Hello')
+print(result.result)         # Response text
+print(result.total_cost_usd) # 0.0012
+print(result.duration_secs)  # 1.5
+```
+
+### SessionResult
+
+Result from `session.send()`.
+
+```python
+@dataclass
+class SessionResult:
+    result: str
+    """The response text"""
+
+    total_cost_usd: Optional[float] = None
+    """Total cost in USD"""
+
+    duration_secs: Optional[float] = None
+    """Response time in seconds"""
+
+    turn_count: Optional[int] = None
+    """Number of conversation turns"""
+
+    session_id: Optional[str] = None
+    """Session ID for resumption"""
+```
+
+### StreamEvent
+
+Event from streaming responses.
+
+```python
+@dataclass
+class StreamEvent:
+    type: str
+    """Event type: 'message', 'tool_use', 'tool_result', 'thinking', 'error'"""
+
+    data: Any
+    """Event data (text for message, dict for others)"""
+
+    name: Optional[str] = None
+    """Tool name (for tool_use events)"""
+
+    input: Optional[Dict[str, Any]] = None
+    """Tool input (for tool_use events)"""
+```
+
+#### Example
+
+```python
+async for event in client.stream('Hello'):
+    if event.type == 'message':
+        print(event.data, end='')
+    elif event.type == 'tool_use':
+        print(f'Calling {event.name} with {event.input}')
+    elif event.type == 'error':
+        print(f'Error: {event.data}')
+```
+
+## Tool Types
+
+### ToolResult
+
+Result returned from tool handlers.
+
+```python
+@dataclass
+class ToolResult:
+    content: List[Dict[str, Any]]
+    """Content blocks"""
+
+    is_error: bool = False
+    """Whether this is an error result"""
+```
+
+#### Content Block Types
+
+```python
+# Text content
+{'type': 'text', 'text': 'Hello world'}
+
+# Image content
+{'type': 'image', 'data': '<base64>', 'mimeType': 'image/png'}
+```
+
+#### Example
+
+```python
+# Using helpers
+from chucky import text_result, error_result
+
+return text_result('Success')
+return error_result('Something went wrong')
+
+# Manual creation
+return ToolResult(
+    content=[{'type': 'text', 'text': 'Hello'}],
+    is_error=False,
+)
+```
+
+### Tool
+
+A tool definition.
+
+```python
+@dataclass
+class Tool:
+    name: str
+    """Unique tool identifier"""
+
+    description: str
+    """What the tool does"""
+
+    input_schema: Dict[str, Any]
+    """JSON Schema for inputs"""
+
+    handler: Callable
+    """Async function to execute"""
+```
+
+### McpServer
+
+An MCP server containing multiple tools.
+
+```python
+@dataclass
+class McpServer:
+    name: str
+    """Server name"""
+
+    version: str
+    """Server version"""
+
+    tools: List[Tool]
+    """List of tools"""
+```
+
+## Token Types
+
+### CreateTokenOptions
+
+Options for `create_token()`.
+
+```python
+class CreateTokenOptions(TypedDict):
+    user_id: str
+    """User identifier"""
+
+    project_id: str
+    """Project UUID"""
+
+    secret: str
+    """HMAC signing secret"""
+
+    expires_in: NotRequired[int]
+    """Token validity in seconds (default: 3600)"""
+
+    budget: TokenBudget
+    """Budget configuration"""
+
+    permissions: NotRequired[TokenPermissions]
+    """Optional permissions"""
+
+    sdk_config: NotRequired[TokenSdkConfig]
+    """Optional SDK config overrides"""
+```
+
+### TokenBudget
+
+Budget configuration.
+
+```python
+class TokenBudget(TypedDict):
+    ai: int
+    """AI budget in microdollars"""
+
+    compute: int
+    """Compute budget in seconds"""
+
+    window: Literal['hour', 'day', 'week', 'month']
+    """Reset window"""
+
+    window_start: str
+    """ISO 8601 timestamp"""
+```
+
+### TokenPermissions
+
+Optional permission constraints.
+
+```python
+class TokenPermissions(TypedDict, total=False):
+    tools: List[str]
+    """Allowed tool names"""
+
+    blocked_tools: List[str]
+    """Blocked tool names"""
+
+    max_turns: int
+    """Maximum conversation turns"""
+
+    model: str
+    """Required model"""
+```
+
+## Helper Functions
+
+### create_token()
+
+Create a JWT token.
+
+```python
+def create_token(
+    user_id: str,
+    project_id: str,
+    secret: str,
+    budget: TokenBudget,
+    *,
+    expires_in: int = 3600,
+    permissions: Optional[TokenPermissions] = None,
+    sdk_config: Optional[TokenSdkConfig] = None,
+) -> str
+```
+
+### create_budget()
+
+Create a budget configuration.
+
+```python
+def create_budget(
+    ai_dollars: float,
+    compute_hours: float,
+    window: Literal['hour', 'day', 'week', 'month'],
+    window_start: Optional[datetime] = None,
+) -> TokenBudget
+```
+
+#### Example
+
+```python
+from chucky import create_token, create_budget
+
+token = create_token(
+    user_id='user-123',
+    project_id='project-uuid',
+    secret='hmac-secret',
+    budget=create_budget(
+        ai_dollars=5.00,
+        compute_hours=2,
+        window='day',
+    ),
+)
+```
+
+### text_result()
+
+Create a text tool result.
+
+```python
+def text_result(text: str) -> ToolResult
+```
+
+### error_result()
+
+Create an error tool result.
+
+```python
+def error_result(message: str) -> ToolResult
+```
+
+### create_mcp_server()
+
+Create an MCP server.
+
+```python
+def create_mcp_server(
+    name: str,
+    tools: List[Tool],
+    version: str = '1.0.0',
+) -> McpServer
+```
+
+## Error Types
+
+### ChuckyError
+
+Base exception class.
+
+```python
+class ChuckyError(Exception):
+    code: str
+    """Error code"""
+
+    details: Optional[Dict[str, Any]]
+    """Additional details"""
+```
+
+### Specific Errors
+
+```python
+class ConnectionError(ChuckyError):
+    """WebSocket connection failed"""
+    pass
+
+class AuthenticationError(ChuckyError):
+    """Invalid or expired token"""
+    pass
+
+class BudgetExceededError(ChuckyError):
+    """AI or compute budget exceeded"""
+    pass
+
+class ConcurrencyLimitError(ChuckyError):
+    """Too many concurrent sessions"""
+    pass
+
+class RateLimitError(ChuckyError):
+    """Rate limit exceeded"""
+    pass
+
+class SessionError(ChuckyError):
+    """Session operation failed"""
+    pass
+
+class ToolExecutionError(ChuckyError):
+    """Tool handler failed"""
+    pass
+
+class TimeoutError(ChuckyError):
+    """Operation timed out"""
+    pass
+
+class ValidationError(ChuckyError):
+    """Invalid input"""
+    pass
+```
+
+#### Example
+
+```python
+from chucky import BudgetExceededError, AuthenticationError
+
+try:
+    result = await client.prompt('Hello')
+except BudgetExceededError as e:
+    print(f'Budget exceeded: {e.code}')
+    print(f'Details: {e.details}')
+except AuthenticationError:
+    print('Token invalid or expired')
+```
+
+## Type Hints
+
+### Commonly Used Types
+
+```python
+from typing import (
+    Any,
+    AsyncGenerator,
+    Callable,
+    Dict,
+    List,
+    Literal,
+    Optional,
+    TypedDict,
+    Union,
+)
+
+# Tool handler signature
+ToolHandler = Callable[..., Coroutine[Any, Any, ToolResult]]
+
+# Streaming generator
+StreamGenerator = AsyncGenerator[StreamEvent, None]
+
+# Budget window types
+BudgetWindow = Literal['hour', 'day', 'week', 'month']
+```
+
+### Pydantic Integration
+
+For complex schemas, use Pydantic models:
+
+```python
+from pydantic import BaseModel, Field
+
+class SearchInput(BaseModel):
+    query: str = Field(description='Search query')
+    limit: int = Field(default=10, ge=1, le=100)
+    sort: Literal['relevance', 'date'] = 'relevance'
+
+@tool('search', 'Search items', schema=SearchInput)
+async def search(args: dict) -> ToolResult:
+    # args is validated against SearchInput
+    ...
+```

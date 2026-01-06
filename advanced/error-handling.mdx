@@ -1,0 +1,395 @@
+---
+title: Error Handling
+description: Handle errors gracefully in your application
+---
+
+# Error Handling
+
+The Chucky SDK provides a comprehensive error hierarchy to help you handle different failure scenarios appropriately.
+
+## Error Classes
+
+All SDK errors extend from `ChuckyError`:
+
+```typescript
+import {
+  ChuckyError,
+  ConnectionError,
+  AuthenticationError,
+  BudgetExceededError,
+  ConcurrencyLimitError,
+  RateLimitError,
+  SessionError,
+  ToolExecutionError,
+  TimeoutError,
+  ValidationError,
+} from '@chucky.cloud/sdk';
+```
+
+## Error Hierarchy
+
+```
+ChuckyError (base)
+├── ConnectionError      - WebSocket connection failures
+├── AuthenticationError  - Invalid or expired tokens
+├── BudgetExceededError  - AI or compute budget exceeded
+├── ConcurrencyLimitError - Too many concurrent sessions
+├── RateLimitError       - Rate limit hit
+├── SessionError         - Session-specific errors
+├── ToolExecutionError   - Tool handler failures
+├── TimeoutError         - Operation timed out
+└── ValidationError      - Invalid input/options
+```
+
+## Error Properties
+
+```typescript
+class ChuckyError extends Error {
+  readonly code: string;                    // Error code (e.g., 'BUDGET_EXCEEDED')
+  readonly details?: Record<string, unknown>; // Additional context
+}
+```
+
+## Handling Errors
+
+### Basic Error Handling
+
+```typescript
+try {
+  const result = await client.prompt({ message: 'Hello' });
+} catch (error) {
+  if (error instanceof ChuckyError) {
+    console.error(`Error [${error.code}]:`, error.message);
+    console.error('Details:', error.details);
+  } else {
+    console.error('Unexpected error:', error);
+  }
+}
+```
+
+### Specific Error Types
+
+```typescript
+try {
+  const result = await client.prompt({ message: 'Hello' });
+} catch (error) {
+  if (error instanceof BudgetExceededError) {
+    // User ran out of budget
+    showUpgradePrompt();
+  } else if (error instanceof AuthenticationError) {
+    // Token invalid or expired
+    await refreshToken();
+    retry();
+  } else if (error instanceof ConnectionError) {
+    // Network issue
+    showOfflineMessage();
+  } else if (error instanceof RateLimitError) {
+    // Too many requests
+    await delay(error.details?.retryAfter || 5000);
+    retry();
+  } else if (error instanceof TimeoutError) {
+    // Request took too long
+    showTimeoutMessage();
+  } else {
+    // Unknown error
+    showGenericError(error.message);
+  }
+}
+```
+
+## Error Codes
+
+| Code | Error Class | Description |
+|------|-------------|-------------|
+| `CONNECTION_ERROR` | `ConnectionError` | WebSocket connection failed |
+| `AUTHENTICATION_ERROR` | `AuthenticationError` | Invalid or expired token |
+| `BUDGET_EXCEEDED` | `BudgetExceededError` | AI or compute budget exhausted |
+| `CONCURRENCY_LIMIT` | `ConcurrencyLimitError` | Max concurrent sessions reached |
+| `RATE_LIMIT` | `RateLimitError` | Too many requests |
+| `SESSION_ERROR` | `SessionError` | Session operation failed |
+| `TOOL_EXECUTION_ERROR` | `ToolExecutionError` | Tool handler threw error |
+| `TIMEOUT` | `TimeoutError` | Operation timed out |
+| `VALIDATION_ERROR` | `ValidationError` | Invalid input |
+
+## Connection Errors
+
+```typescript
+try {
+  const client = new ChuckyClient({ token });
+  await client.prompt({ message: 'Hello' });
+} catch (error) {
+  if (error instanceof ConnectionError) {
+    // error.details may contain:
+    // - code: WebSocket close code
+    // - reason: Close reason
+    // - wasClean: Whether close was clean
+
+    if (error.details?.code === 1006) {
+      // Abnormal closure - network issue
+      showNetworkError();
+    }
+  }
+}
+```
+
+## Budget Errors
+
+```typescript
+try {
+  const result = await session.send('Complex query...');
+} catch (error) {
+  if (error instanceof BudgetExceededError) {
+    // error.details may contain:
+    // - budgetType: 'ai' or 'compute'
+    // - used: Amount used
+    // - limit: Budget limit
+    // - overage: Amount over budget
+
+    const { budgetType, used, limit } = error.details || {};
+    console.log(`${budgetType} budget exceeded: ${used}/${limit}`);
+
+    if (budgetType === 'ai') {
+      showMessage('You\'ve used your AI budget for this period');
+    } else {
+      showMessage('Session time limit reached');
+    }
+  }
+}
+```
+
+## Session Errors
+
+```typescript
+session.on({
+  onError: (error) => {
+    if (error instanceof SessionError) {
+      // error.details may contain:
+      // - sessionId: The session ID
+      // - state: Session state when error occurred
+
+      console.error(`Session ${error.details?.sessionId} error:`, error.message);
+
+      // Session may be in error state
+      if (session.state === 'error') {
+        // Create a new session
+        await createNewSession();
+      }
+    }
+  },
+});
+```
+
+## Tool Execution Errors
+
+Handle errors in tool handlers:
+
+```typescript
+const myTool = tool(
+  'risky_operation',
+  'Do something that might fail',
+  schema,
+  async (input) => {
+    try {
+      const result = await riskyOperation(input);
+      return textResult(result);
+    } catch (err) {
+      // Return error result instead of throwing
+      return errorResult(`Operation failed: ${err.message}`);
+    }
+  }
+);
+```
+
+When a tool throws, it becomes a `ToolExecutionError`:
+
+```typescript
+try {
+  await session.send('Use the risky tool');
+} catch (error) {
+  if (error instanceof ToolExecutionError) {
+    // error.details may contain:
+    // - toolName: Name of the tool that failed
+    // - input: Input that was passed to the tool
+    // - originalError: The original error thrown
+
+    console.error(`Tool ${error.details?.toolName} failed:`, error.message);
+  }
+}
+```
+
+## Retry Strategies
+
+### Simple Retry
+
+```typescript
+async function withRetry<T>(
+  fn: () => Promise<T>,
+  maxAttempts = 3,
+  delayMs = 1000
+): Promise<T> {
+  let lastError: Error;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      return await fn();
+    } catch (error) {
+      lastError = error as Error;
+
+      // Don't retry certain errors
+      if (error instanceof AuthenticationError) throw error;
+      if (error instanceof BudgetExceededError) throw error;
+      if (error instanceof ValidationError) throw error;
+
+      if (attempt < maxAttempts) {
+        await new Promise(r => setTimeout(r, delayMs * attempt));
+      }
+    }
+  }
+
+  throw lastError!;
+}
+
+// Usage
+const result = await withRetry(() =>
+  client.prompt({ message: 'Hello' })
+);
+```
+
+### Exponential Backoff
+
+```typescript
+async function withExponentialBackoff<T>(
+  fn: () => Promise<T>,
+  options = { maxAttempts: 5, baseDelayMs: 1000, maxDelayMs: 30000 }
+): Promise<T> {
+  for (let attempt = 0; attempt < options.maxAttempts; attempt++) {
+    try {
+      return await fn();
+    } catch (error) {
+      if (
+        error instanceof AuthenticationError ||
+        error instanceof BudgetExceededError ||
+        error instanceof ValidationError
+      ) {
+        throw error;
+      }
+
+      if (attempt === options.maxAttempts - 1) throw error;
+
+      const delay = Math.min(
+        options.baseDelayMs * Math.pow(2, attempt),
+        options.maxDelayMs
+      );
+      const jitter = delay * 0.1 * Math.random();
+      await new Promise(r => setTimeout(r, delay + jitter));
+    }
+  }
+
+  throw new Error('Max attempts reached');
+}
+```
+
+## Error Recovery Patterns
+
+### Graceful Degradation
+
+```typescript
+async function getAnswer(question: string): Promise<string> {
+  try {
+    const result = await client.prompt({ message: question });
+    return result.text || 'No response';
+  } catch (error) {
+    if (error instanceof BudgetExceededError) {
+      return 'You\'ve reached your usage limit. Please try again later.';
+    }
+    if (error instanceof ConnectionError) {
+      return 'Unable to connect. Please check your internet connection.';
+    }
+    return 'Something went wrong. Please try again.';
+  }
+}
+```
+
+### Circuit Breaker
+
+```typescript
+class CircuitBreaker {
+  private failures = 0;
+  private lastFailure = 0;
+  private state: 'closed' | 'open' | 'half-open' = 'closed';
+
+  constructor(
+    private threshold = 5,
+    private resetTimeMs = 30000
+  ) {}
+
+  async call<T>(fn: () => Promise<T>): Promise<T> {
+    if (this.state === 'open') {
+      if (Date.now() - this.lastFailure > this.resetTimeMs) {
+        this.state = 'half-open';
+      } else {
+        throw new Error('Circuit breaker is open');
+      }
+    }
+
+    try {
+      const result = await fn();
+      this.onSuccess();
+      return result;
+    } catch (error) {
+      this.onFailure();
+      throw error;
+    }
+  }
+
+  private onSuccess() {
+    this.failures = 0;
+    this.state = 'closed';
+  }
+
+  private onFailure() {
+    this.failures++;
+    this.lastFailure = Date.now();
+    if (this.failures >= this.threshold) {
+      this.state = 'open';
+    }
+  }
+}
+
+// Usage
+const breaker = new CircuitBreaker();
+
+try {
+  const result = await breaker.call(() =>
+    client.prompt({ message: 'Hello' })
+  );
+} catch (error) {
+  if (error.message === 'Circuit breaker is open') {
+    showServiceUnavailable();
+  }
+}
+```
+
+## Logging Errors
+
+```typescript
+function logError(error: Error, context?: Record<string, unknown>) {
+  if (error instanceof ChuckyError) {
+    console.error({
+      type: 'ChuckyError',
+      code: error.code,
+      message: error.message,
+      details: error.details,
+      context,
+      stack: error.stack,
+    });
+  } else {
+    console.error({
+      type: 'UnexpectedError',
+      message: error.message,
+      context,
+      stack: error.stack,
+    });
+  }
+}
+```

@@ -1,80 +1,245 @@
 ---
-title: "Quickstart"
-description: "Start building awesome documentation in minutes"
+title: Quickstart
+description: Get up and running with Chucky SDK in 5 minutes
 ---
 
-## Get started in three steps
+# Quickstart
 
-Get your documentation site running locally and make your first customization.
+This guide will help you integrate Claude into your application using the Chucky SDK.
 
-### Step 1: Set up your local environment
+## Prerequisites
 
-<AccordionGroup>
-  <Accordion icon="copy" title="Clone your docs locally">
-    During the onboarding process, you created a GitHub repository with your docs content if you didn't already have one. You can find a link to this repository in your [dashboard](https://dashboard.mintlify.com).
-    
-    To clone the repository locally so that you can make and preview changes to your docs, follow the [Cloning a repository](https://docs.github.com/en/repositories/creating-and-managing-repositories/cloning-a-repository) guide in the GitHub docs.
-  </Accordion>
-  <Accordion icon="rectangle-terminal" title="Start the preview server">
-    1. Install the Mintlify CLI: `npm i -g mint`
-    2. Navigate to your docs directory and run: `mint dev`
-    3. Open `http://localhost:3000` to see your docs live!
-    
-    <Tip>Your preview updates automatically as you edit files.</Tip>
-  </Accordion>
-</AccordionGroup>
+- A Chucky account with a project created at [portal.chucky.cloud](https://portal.chucky.cloud)
+- Your project's **HMAC secret** (found in project settings)
+- Node.js 18+ or Python 3.10+
 
-### Step 2: Deploy your changes
+## Installation
 
-<AccordionGroup>
-  <Accordion icon="github" title="Install our GitHub app">
-    Install the Mintlify GitHub app from your [dashboard](https://dashboard.mintlify.com/settings/organization/github-app).
-    
-    Our GitHub app automatically deploys your changes to your docs site, so you don't need to manage deployments yourself.
-</Accordion>
-<Accordion icon="palette" title="Update your site name and colors">
-    For a first change, let's update the name and colors of your docs site.
+<CodeGroup>
+```bash npm
+npm install @chucky.cloud/sdk
+```
 
-    1. Open `docs.json` in your editor.
-    2. Change the `"name"` field to your project name.
-    3. Update the `"colors"` to match your brand.
-    4. Save and see your changes instantly at `http://localhost:3000`.
+```bash yarn
+yarn add @chucky.cloud/sdk
+```
 
-    <Tip>Try changing the primary color to see an immediate difference!</Tip>
-  </Accordion>
-</AccordionGroup>
+```bash pnpm
+pnpm add @chucky.cloud/sdk
+```
 
-### Step 3: Go live
+```bash pip
+pip install chucky-sdk
+```
 
-<Accordion icon="rocket" title="Publish your docs">
-  1. Commit and push your changes.
-  2. Your docs will update and be live in moments!
-</Accordion>
+```bash poetry
+poetry add chucky-sdk
+```
+</CodeGroup>
 
-## Next steps
+## Step 1: Create a Token (Server-Side)
 
-Now that you have your docs running, explore these key features:
+Tokens authenticate users and set their usage budgets. **Always create tokens on your server** - never expose your HMAC secret to clients.
+
+<CodeGroup>
+```typescript TypeScript (Server)
+import { createToken, createBudget } from '@chucky.cloud/sdk';
+
+// Create a token for a user
+const token = await createToken({
+  userId: 'user-123',              // Your user's ID
+  projectId: 'your-project-uuid',  // From portal.chucky.cloud
+  secret: process.env.HMAC_SECRET, // Your HMAC secret
+  expiresIn: 3600,                 // 1 hour
+  budget: createBudget({
+    aiDollars: 1.00,               // $1 AI budget
+    computeHours: 1,               // 1 hour compute
+    window: 'day',                 // Resets daily
+  }),
+});
+
+// Return token to client
+return { token };
+```
+
+```python Python (Server)
+from chucky import create_token, create_budget
+import os
+
+# Create a token for a user
+token = create_token(
+    user_id='user-123',
+    project_id='your-project-uuid',
+    secret=os.environ['HMAC_SECRET'],
+    expires_in=3600,
+    budget=create_budget(
+        ai_dollars=1.00,
+        compute_hours=1,
+        window='day',
+    ),
+)
+
+# Return token to client
+return {'token': token}
+```
+</CodeGroup>
+
+## Step 2: Use the SDK (Client-Side)
+
+Once your client has a token, they can use the SDK to interact with Claude.
+
+### Simple Prompt
+
+<CodeGroup>
+```typescript TypeScript
+import { ChuckyClient } from '@chucky.cloud/sdk';
+
+const client = new ChuckyClient({ token });
+
+// One-shot prompt
+const result = await client.prompt({
+  message: 'What is the capital of France?',
+  model: 'claude-sonnet-4-5-20250929',
+});
+
+console.log(result.text); // "The capital of France is Paris."
+console.log(result.total_cost_usd); // 0.0012
+```
+
+```python Python
+from chucky import Chucky
+
+client = Chucky(token=token)
+
+# One-shot prompt
+result = await client.prompt('What is the capital of France?')
+
+print(result.result)  # "The capital of France is Paris."
+print(result.total_cost_usd)  # 0.0012
+```
+</CodeGroup>
+
+### Multi-Turn Conversation
+
+<CodeGroup>
+```typescript TypeScript
+const session = await client.createSession({
+  model: 'claude-sonnet-4-5-20250929',
+  systemPrompt: 'You are a helpful geography tutor.',
+});
+
+// First message
+const r1 = await session.send('What is the capital of France?');
+console.log(r1.text); // "The capital of France is Paris."
+
+// Follow-up (Claude remembers context)
+const r2 = await session.send('What about Germany?');
+console.log(r2.text); // "The capital of Germany is Berlin."
+
+// Close when done
+await session.close();
+```
+
+```python Python
+async with client.session(system_prompt='You are a helpful geography tutor.') as session:
+    # First message
+    r1 = await session.send('What is the capital of France?')
+    print(r1.result)  # "The capital of France is Paris."
+
+    # Follow-up (Claude remembers context)
+    r2 = await session.send('What about Germany?')
+    print(r2.result)  # "The capital of Germany is Berlin."
+```
+</CodeGroup>
+
+### Streaming Responses
+
+<CodeGroup>
+```typescript TypeScript
+for await (const event of client.promptStream({
+  message: 'Write a haiku about coding',
+})) {
+  if (event.type === 'text') {
+    process.stdout.write(event.text);
+  }
+}
+```
+
+```python Python
+async for event in client.stream('Write a haiku about coding'):
+    if event.type == 'message':
+        print(event.data, end='')
+```
+</CodeGroup>
+
+## Step 3: Add Tools (Optional)
+
+Give Claude the ability to take actions in your application.
+
+<CodeGroup>
+```typescript TypeScript
+import { ChuckyClient, tool } from '@chucky.cloud/sdk';
+
+// Define a tool
+const weatherTool = tool(
+  'get_weather',
+  'Get current weather for a city',
+  {
+    type: 'object',
+    properties: {
+      city: { type: 'string', description: 'City name' },
+    },
+    required: ['city'],
+  },
+  async ({ city }) => {
+    // Your implementation
+    const weather = await fetchWeather(city);
+    return { content: [{ type: 'text', text: `${city}: ${weather}` }] };
+  }
+);
+
+// Use tools in a session
+const session = await client.createSession({
+  tools: [weatherTool],
+});
+
+const result = await session.send('What is the weather in Tokyo?');
+// Claude will call get_weather, then respond with the result
+```
+
+```python Python
+from chucky import Chucky, tool, text_result
+
+@tool('get_weather', 'Get current weather for a city')
+async def get_weather(city: str) -> ToolResult:
+    """
+    Args:
+        city: City name
+    """
+    weather = await fetch_weather(city)
+    return text_result(f'{city}: {weather}')
+
+# Use tools in a prompt
+result = await client.prompt(
+    'What is the weather in Tokyo?',
+    tools=[get_weather],
+)
+```
+</CodeGroup>
+
+## Next Steps
 
 <CardGroup cols={2}>
-
-<Card title="Write Content" icon="pen-to-square" href="/essentials/markdown">
-  Learn MDX syntax and start writing your documentation.
-</Card>
-
-<Card title="Customize style" icon="palette" href="/essentials/settings">
-  Make your docs match your brand perfectly.
-</Card>
-
-<Card title="Add code examples" icon="square-code" href="/essentials/code">
-  Include syntax-highlighted code blocks.
-</Card>
-
-<Card title="API documentation" icon="code" href="/api-reference/introduction">
-  Auto-generate API docs from OpenAPI specs.
-</Card>
-
+  <Card title="Authentication" icon="key" href="/authentication">
+    Learn about token options and budget management
+  </Card>
+  <Card title="Sessions" icon="comments" href="/concepts/sessions">
+    Deep dive into multi-turn conversations
+  </Card>
+  <Card title="Tools" icon="wrench" href="/concepts/tools">
+    Create powerful custom tools
+  </Card>
+  <Card title="Error Handling" icon="triangle-exclamation" href="/advanced/error-handling">
+    Handle errors gracefully
+  </Card>
 </CardGroup>
-
-<Note>
-  **Need help?** See our [full documentation](https://mintlify.com/docs) or join our [community](https://mintlify.com/community).
-</Note>

@@ -1,0 +1,318 @@
+---
+title: Session
+description: JavaScript/TypeScript Session class reference
+---
+
+# Session
+
+The Session class manages multi-turn conversations with Claude.
+
+## Creating Sessions
+
+Sessions are created via the client:
+
+```typescript
+const session = await client.createSession({
+  model: 'claude-sonnet-4-5-20250929',
+  systemPrompt: 'You are a helpful assistant.',
+});
+```
+
+## Methods
+
+### send()
+
+Send a message and wait for the complete response.
+
+```typescript
+async send(message: string): Promise<SessionResult>
+```
+
+#### Example
+
+```typescript
+const result = await session.send('What is the capital of France?');
+console.log(result.text); // "The capital of France is Paris."
+```
+
+---
+
+### sendStream()
+
+Send a message with streaming response.
+
+```typescript
+async *sendStream(message: string): AsyncGenerator<StreamingEvent>
+```
+
+#### Example
+
+```typescript
+for await (const event of session.sendStream('Tell me a story')) {
+  switch (event.type) {
+    case 'text':
+      process.stdout.write(event.text);
+      break;
+    case 'tool_use':
+      console.log(`Tool: ${event.name}`);
+      break;
+    case 'thinking':
+      console.log(`[Thinking: ${event.thinking}]`);
+      break;
+  }
+}
+```
+
+---
+
+### prompt()
+
+Alias for `send()`.
+
+```typescript
+async prompt(message: string): Promise<SessionResult>
+```
+
+---
+
+### connect()
+
+Manually connect the session (usually automatic).
+
+```typescript
+async connect(): Promise<void>
+```
+
+---
+
+### close()
+
+Close the session and release resources.
+
+```typescript
+async close(): Promise<void>
+```
+
+#### Example
+
+```typescript
+try {
+  await session.send('Hello');
+  await session.send('Goodbye');
+} finally {
+  await session.close();
+}
+```
+
+---
+
+### getResult()
+
+Get the last result from the session.
+
+```typescript
+getResult(): SessionResult | null
+```
+
+---
+
+### on()
+
+Register event handlers.
+
+```typescript
+on(handlers: SessionEventHandlers): this
+```
+
+#### SessionEventHandlers
+
+| Handler | Parameters | Description |
+|---------|------------|-------------|
+| `onSessionInfo` | `(info: SessionInfo)` | Session initialized |
+| `onMessage` | `(message: Message)` | Message received |
+| `onText` | `(text: string)` | Streaming text |
+| `onToolUse` | `(tool: ToolCall)` | Tool invoked |
+| `onToolResult` | `(callId, result)` | Tool result |
+| `onThinking` | `(thinking: string)` | Extended thinking |
+| `onComplete` | `(result: SessionResult)` | Response complete |
+| `onError` | `(error: Error)` | Error occurred |
+
+#### Example
+
+```typescript
+session.on({
+  onSessionInfo: (info) => {
+    console.log('Session started:', info.sessionId);
+  },
+  onText: (text) => {
+    updateDisplay(text);
+  },
+  onToolUse: (tool) => {
+    showToolIndicator(tool.name);
+  },
+  onComplete: (result) => {
+    console.log('Cost:', result.total_cost_usd);
+  },
+  onError: (error) => {
+    showError(error.message);
+  },
+});
+```
+
+## Properties
+
+### state
+
+Current session state.
+
+```typescript
+get state(): SessionState
+```
+
+```typescript
+type SessionState =
+  | 'idle'           // Created, not connected
+  | 'initializing'   // Connecting
+  | 'ready'          // Ready for messages
+  | 'processing'     // Waiting for response
+  | 'waiting_tool'   // Waiting for tool result
+  | 'completed'      // Session finished
+  | 'error';         // Error state
+```
+
+#### Example
+
+```typescript
+if (session.state === 'ready') {
+  await session.send('Hello');
+}
+```
+
+---
+
+### sessionId
+
+The session's unique identifier.
+
+```typescript
+get sessionId(): string | null
+```
+
+#### Example
+
+```typescript
+const id = session.sessionId;
+// Save for later resumption
+localStorage.setItem('lastSession', id);
+```
+
+## SessionResult
+
+The result returned from `send()` and `prompt()`.
+
+```typescript
+interface SessionResult {
+  type: 'result';
+  subtype?: 'success' | 'error' | 'interrupted';
+  text?: string;                    // Final text response
+  messages?: Message[];             // Full conversation
+  total_cost_usd?: number;          // Total cost
+  duration_secs?: number;           // Response time
+  turn_count?: number;              // Number of turns
+  usage?: Usage;                    // Token usage
+  session_id?: string;              // Session ID
+  error?: string;                   // Error message
+}
+```
+
+### Example
+
+```typescript
+const result = await session.send('Hello');
+
+if (result.subtype === 'success') {
+  console.log('Response:', result.text);
+  console.log('Cost:', result.total_cost_usd);
+  console.log('Turns:', result.turn_count);
+} else if (result.subtype === 'error') {
+  console.error('Error:', result.error);
+}
+```
+
+## StreamingEvent
+
+Events received during streaming.
+
+```typescript
+type StreamingEvent =
+  | { type: 'text'; text: string }
+  | { type: 'tool_use'; id: string; name: string; input: Record<string, unknown> }
+  | { type: 'tool_result'; id: string; content: unknown; isError?: boolean }
+  | { type: 'thinking'; thinking: string }
+  | { type: 'error'; error: Error };
+```
+
+## Usage Patterns
+
+### Basic Conversation
+
+```typescript
+const session = await client.createSession();
+
+const r1 = await session.send('Hi, my name is Alice');
+const r2 = await session.send('What is my name?');
+console.log(r2.text); // "Your name is Alice."
+
+await session.close();
+```
+
+### With Event Handlers
+
+```typescript
+const session = await client.createSession();
+
+session.on({
+  onText: (text) => appendToChat(text),
+  onToolUse: (tool) => showToolIndicator(tool.name),
+  onComplete: () => hideTypingIndicator(),
+});
+
+await session.send('Search for restaurants near me');
+```
+
+### Resuming Sessions
+
+```typescript
+// Get session ID from previous session
+const savedSessionId = localStorage.getItem('sessionId');
+
+if (savedSessionId) {
+  const session = await client.resumeSession(savedSessionId);
+  const result = await session.send('Continue our conversation');
+} else {
+  const session = await client.createSession();
+  localStorage.setItem('sessionId', session.sessionId);
+}
+```
+
+### Error Handling
+
+```typescript
+const session = await client.createSession();
+
+try {
+  const result = await session.send('Complex query...');
+
+  if (result.subtype === 'error') {
+    console.error('Claude error:', result.error);
+  }
+} catch (error) {
+  if (error instanceof BudgetExceededError) {
+    showUpgradePrompt();
+  } else {
+    showGenericError(error);
+  }
+} finally {
+  await session.close();
+}
+```

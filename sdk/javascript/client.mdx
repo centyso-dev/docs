@@ -1,0 +1,303 @@
+---
+title: ChuckyClient
+description: JavaScript/TypeScript SDK client reference
+---
+
+# ChuckyClient
+
+The main client class for interacting with Chucky.
+
+## Installation
+
+```bash
+npm install @chucky.cloud/sdk
+```
+
+## Import
+
+```typescript
+import { ChuckyClient, createClient } from '@chucky.cloud/sdk';
+```
+
+## Constructor
+
+```typescript
+const client = new ChuckyClient(options: ClientOptions);
+```
+
+### ClientOptions
+
+| Property | Type | Required | Default | Description |
+|----------|------|----------|---------|-------------|
+| `token` | `string` | Yes | - | JWT authentication token |
+| `baseUrl` | `string` | No | `'wss://conjure.chucky.cloud/ws'` | WebSocket server URL |
+| `debug` | `boolean` | No | `false` | Enable debug logging |
+| `timeout` | `number` | No | `30000` | Connection timeout (ms) |
+| `keepAliveInterval` | `number` | No | `300000` | Keep-alive interval (ms) |
+| `autoReconnect` | `boolean` | No | `true` | Auto-reconnect on disconnect |
+| `maxReconnectAttempts` | `number` | No | `5` | Max reconnect attempts |
+
+### Example
+
+```typescript
+const client = new ChuckyClient({
+  token: 'your-jwt-token',
+  debug: true,
+  timeout: 60000,
+});
+```
+
+## Methods
+
+### prompt()
+
+Send a one-shot prompt (stateless).
+
+```typescript
+async prompt(options: PromptOptions): Promise<PromptResult>
+```
+
+#### PromptOptions
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `message` | `string` | The prompt message |
+| `model` | `string` | Claude model to use |
+| `systemPrompt` | `string` | System prompt |
+| `tools` | `Tool[]` | Available tools |
+| `mcpServers` | `McpServer[]` | MCP servers |
+| `maxTurns` | `number` | Max conversation turns |
+| `maxBudgetUsd` | `number` | Budget limit |
+| `outputFormat` | `OutputFormat` | Structured output format |
+
+#### Example
+
+```typescript
+const result = await client.prompt({
+  message: 'What is 2 + 2?',
+  model: 'claude-sonnet-4-5-20250929',
+});
+
+console.log(result.text); // "4"
+console.log(result.total_cost_usd); // 0.0001
+```
+
+---
+
+### promptStream()
+
+Send a prompt with streaming response.
+
+```typescript
+async *promptStream(options: PromptOptions): AsyncGenerator<StreamingEvent, PromptResult>
+```
+
+#### Example
+
+```typescript
+for await (const event of client.promptStream({
+  message: 'Write a poem',
+})) {
+  if (event.type === 'text') {
+    process.stdout.write(event.text);
+  }
+}
+```
+
+---
+
+### createSession()
+
+Create a new conversation session.
+
+```typescript
+async createSession(options?: SessionOptions): Promise<Session>
+```
+
+#### SessionOptions
+
+Extends `PromptOptions` with:
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `sessionId` | `string` | Resume existing session |
+| `forkSession` | `string` | Fork from session ID |
+| `continue` | `boolean` | Continue from last message |
+
+#### Example
+
+```typescript
+const session = await client.createSession({
+  model: 'claude-sonnet-4-5-20250929',
+  systemPrompt: 'You are a helpful assistant.',
+});
+```
+
+---
+
+### resumeSession()
+
+Resume an existing session by ID.
+
+```typescript
+async resumeSession(
+  sessionId: string,
+  options?: Omit<SessionOptions, 'sessionId'>
+): Promise<Session>
+```
+
+#### Example
+
+```typescript
+const session = await client.resumeSession('session-123', {
+  model: 'claude-sonnet-4-5-20250929',
+});
+
+const result = await session.send('What did we discuss before?');
+```
+
+---
+
+### close()
+
+Close all sessions and disconnect.
+
+```typescript
+async close(): Promise<void>
+```
+
+#### Example
+
+```typescript
+// Clean up when done
+await client.close();
+```
+
+---
+
+### on()
+
+Register event handlers.
+
+```typescript
+on(handlers: ClientEventHandlers): this
+```
+
+#### ClientEventHandlers
+
+| Handler | Parameters | Description |
+|---------|------------|-------------|
+| `onConnect` | `()` | WebSocket connected |
+| `onDisconnect` | `(reason: string)` | WebSocket disconnected |
+| `onReconnect` | `(attempt: number)` | Reconnection attempt |
+| `onError` | `(error: Error)` | Error occurred |
+
+#### Example
+
+```typescript
+client.on({
+  onConnect: () => console.log('Connected'),
+  onDisconnect: (reason) => console.log('Disconnected:', reason),
+  onError: (error) => console.error('Error:', error),
+});
+```
+
+## Properties
+
+### status
+
+Current connection status.
+
+```typescript
+get status(): ConnectionStatus
+```
+
+```typescript
+type ConnectionStatus =
+  | 'disconnected'
+  | 'connecting'
+  | 'connected'
+  | 'reconnecting'
+  | 'error';
+```
+
+#### Example
+
+```typescript
+if (client.status === 'connected') {
+  await client.prompt({ message: 'Hello' });
+}
+```
+
+## Factory Function
+
+### createClient()
+
+Alternative factory function for creating clients.
+
+```typescript
+function createClient(options: ClientOptions): ChuckyClient
+```
+
+#### Example
+
+```typescript
+const client = createClient({ token: 'your-token' });
+```
+
+## Complete Example
+
+```typescript
+import { ChuckyClient, tool, textResult } from '@chucky.cloud/sdk';
+
+// Create client
+const client = new ChuckyClient({
+  token: process.env.CHUCKY_TOKEN,
+  debug: true,
+});
+
+// Set up event handlers
+client.on({
+  onConnect: () => console.log('Connected to Chucky'),
+  onError: (err) => console.error('Client error:', err),
+});
+
+// Define a tool
+const calculatorTool = tool(
+  'calculate',
+  'Perform math calculations',
+  {
+    type: 'object',
+    properties: {
+      expression: { type: 'string' },
+    },
+    required: ['expression'],
+  },
+  async ({ expression }) => {
+    const result = eval(expression); // Use a proper math lib in production
+    return textResult(String(result));
+  }
+);
+
+// Create a session with tools
+const session = await client.createSession({
+  model: 'claude-sonnet-4-5-20250929',
+  systemPrompt: 'You are a math tutor.',
+  tools: [calculatorTool],
+});
+
+// Send messages
+const result = await session.send('What is 15% of 230?');
+console.log(result.text);
+
+// Stream a response
+for await (const event of session.sendStream('Explain the quadratic formula')) {
+  if (event.type === 'text') {
+    process.stdout.write(event.text);
+  }
+}
+
+// Clean up
+await session.close();
+await client.close();
+```

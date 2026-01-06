@@ -1,0 +1,440 @@
+---
+title: Tools & MCP
+description: JavaScript/TypeScript tools and MCP server reference
+---
+
+# Tools & MCP
+
+Functions for creating tools and MCP servers.
+
+## Tool Creation
+
+### tool()
+
+Shorthand function for creating tools.
+
+```typescript
+function tool(
+  name: string,
+  description: string,
+  inputSchema: ToolInputSchema,
+  handler: ToolHandler
+): ToolDefinition
+```
+
+#### Example
+
+```typescript
+import { tool, textResult } from '@chucky.cloud/sdk';
+
+const greetTool = tool(
+  'greet',
+  'Greet a person by name',
+  {
+    type: 'object',
+    properties: {
+      name: { type: 'string', description: 'Person name' },
+    },
+    required: ['name'],
+  },
+  async ({ name }) => textResult(`Hello, ${name}!`)
+);
+```
+
+---
+
+### createTool()
+
+Full tool creation with all options.
+
+```typescript
+function createTool(options: ToolOptions): ToolDefinition
+```
+
+#### ToolOptions
+
+| Property | Type | Required | Description |
+|----------|------|----------|-------------|
+| `name` | `string` | Yes | Unique tool name |
+| `description` | `string` | Yes | What the tool does |
+| `inputSchema` | `object` | Yes | JSON Schema for inputs |
+| `handler` | `function` | No | Handler function |
+| `executeIn` | `'server' \| 'browser'` | No | Execution location |
+
+#### Example
+
+```typescript
+import { createTool, textResult, errorResult } from '@chucky.cloud/sdk';
+
+const weatherTool = createTool({
+  name: 'get_weather',
+  description: 'Get weather for a city',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      city: { type: 'string' },
+      unit: { type: 'string', enum: ['celsius', 'fahrenheit'] },
+    },
+    required: ['city'],
+  },
+  executeIn: 'browser',
+  handler: async ({ city, unit = 'celsius' }) => {
+    try {
+      const weather = await fetchWeather(city, unit);
+      return textResult(`${city}: ${weather.temp}°`);
+    } catch (err) {
+      return errorResult(`Could not fetch weather: ${err.message}`);
+    }
+  },
+});
+```
+
+---
+
+### browserTool()
+
+Create a tool that executes in the browser.
+
+```typescript
+function browserTool(options: Omit<ToolOptions, 'executeIn'>): ToolDefinition
+```
+
+#### Example
+
+```typescript
+import { browserTool, textResult } from '@chucky.cloud/sdk';
+
+const alertTool = browserTool({
+  name: 'show_alert',
+  description: 'Show an alert dialog',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      message: { type: 'string' },
+    },
+    required: ['message'],
+  },
+  handler: async ({ message }) => {
+    alert(message);
+    return textResult('Alert shown');
+  },
+});
+```
+
+---
+
+### serverTool()
+
+Create a tool that executes on the server (no handler needed).
+
+```typescript
+function serverTool(
+  options: Omit<ToolOptions, 'executeIn' | 'handler'>
+): ToolDefinition
+```
+
+#### Example
+
+```typescript
+import { serverTool } from '@chucky.cloud/sdk';
+
+const dbTool = serverTool({
+  name: 'query_database',
+  description: 'Execute a database query',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      sql: { type: 'string' },
+    },
+    required: ['sql'],
+  },
+});
+```
+
+## Result Helpers
+
+### textResult()
+
+Create a text result.
+
+```typescript
+function textResult(text: string): ToolResult
+```
+
+#### Example
+
+```typescript
+return textResult('Operation completed successfully');
+// Returns: { content: [{ type: 'text', text: '...' }] }
+```
+
+---
+
+### errorResult()
+
+Create an error result.
+
+```typescript
+function errorResult(message: string): ToolResult
+```
+
+#### Example
+
+```typescript
+return errorResult('File not found');
+// Returns: { content: [{ type: 'text', text: '...' }], isError: true }
+```
+
+---
+
+### imageResult()
+
+Create an image result.
+
+```typescript
+function imageResult(data: string, mimeType: string): ToolResult
+```
+
+#### Example
+
+```typescript
+const base64 = await generateChart(data);
+return imageResult(base64, 'image/png');
+// Returns: { content: [{ type: 'image', data: '...', mimeType: 'image/png' }] }
+```
+
+## MCP Servers
+
+### McpServerBuilder
+
+Builder pattern for creating MCP servers.
+
+```typescript
+class McpServerBuilder {
+  constructor(name: string, version?: string)
+  addTool(tool: ToolOptions): this
+  build(): McpServer
+}
+```
+
+#### Example
+
+```typescript
+import { McpServerBuilder, textResult } from '@chucky.cloud/sdk';
+
+const server = new McpServerBuilder('file-tools', '1.0.0')
+  .addTool({
+    name: 'read_file',
+    description: 'Read a file',
+    inputSchema: { type: 'object', properties: { path: { type: 'string' } }, required: ['path'] },
+    handler: async ({ path }) => textResult(await fs.readFile(path, 'utf-8')),
+  })
+  .addTool({
+    name: 'write_file',
+    description: 'Write a file',
+    inputSchema: { type: 'object', properties: { path: { type: 'string' }, content: { type: 'string' } }, required: ['path', 'content'] },
+    handler: async ({ path, content }) => {
+      await fs.writeFile(path, content);
+      return textResult('File written');
+    },
+  })
+  .build();
+```
+
+---
+
+### createMcpServer()
+
+Create an MCP server from an array of tools.
+
+```typescript
+function createMcpServer(
+  name: string,
+  tools: ToolDefinition[],
+  version?: string
+): McpServer
+```
+
+#### Example
+
+```typescript
+import { createMcpServer, tool, textResult } from '@chucky.cloud/sdk';
+
+const readTool = tool('read', 'Read file', schema1, handler1);
+const writeTool = tool('write', 'Write file', schema2, handler2);
+
+const server = createMcpServer('file-tools', [readTool, writeTool], '1.0.0');
+```
+
+---
+
+### mcpServer()
+
+Shorthand builder function.
+
+```typescript
+function mcpServer(name: string): McpServerBuilder
+```
+
+#### Example
+
+```typescript
+import { mcpServer, textResult } from '@chucky.cloud/sdk';
+
+const server = mcpServer('math-tools')
+  .addTool({
+    name: 'add',
+    description: 'Add numbers',
+    inputSchema: { type: 'object', properties: { a: { type: 'number' }, b: { type: 'number' } }, required: ['a', 'b'] },
+    handler: async ({ a, b }) => textResult(String(a + b)),
+  })
+  .build();
+```
+
+## Types
+
+### ToolDefinition
+
+```typescript
+interface ToolDefinition {
+  name: string;
+  description: string;
+  inputSchema: ToolInputSchema;
+  executeIn?: 'server' | 'browser';
+  handler?: ToolHandler;
+}
+```
+
+### ToolInputSchema
+
+JSON Schema format:
+
+```typescript
+interface ToolInputSchema {
+  type: 'object';
+  properties: Record<string, PropertySchema>;
+  required?: string[];
+}
+
+interface PropertySchema {
+  type: 'string' | 'number' | 'boolean' | 'array' | 'object';
+  description?: string;
+  enum?: string[];
+  items?: PropertySchema;
+  properties?: Record<string, PropertySchema>;
+  default?: unknown;
+  minimum?: number;
+  maximum?: number;
+}
+```
+
+### ToolResult
+
+```typescript
+interface ToolResult {
+  content: ContentBlock[];
+  isError?: boolean;
+}
+
+type ContentBlock =
+  | { type: 'text'; text: string }
+  | { type: 'image'; data: string; mimeType: string };
+```
+
+### ToolHandler
+
+```typescript
+type ToolHandler = (input: Record<string, unknown>) => Promise<ToolResult>;
+```
+
+### McpServer
+
+```typescript
+interface McpServer {
+  name: string;
+  version: string;
+  tools: ToolDefinition[];
+}
+```
+
+## Using Tools
+
+### In Sessions
+
+```typescript
+const session = await client.createSession({
+  tools: [greetTool, weatherTool],
+  mcpServers: [fileServer],
+});
+
+await session.send('Greet Alice and check the weather in Paris');
+```
+
+### In Prompts
+
+```typescript
+const result = await client.prompt({
+  message: 'Calculate 15% of 230',
+  tools: [calculatorTool],
+});
+```
+
+## Complete Example
+
+```typescript
+import {
+  ChuckyClient,
+  McpServerBuilder,
+  tool,
+  textResult,
+  errorResult,
+} from '@chucky.cloud/sdk';
+
+// Individual tool
+const timeTool = tool(
+  'get_time',
+  'Get current time',
+  { type: 'object', properties: {} },
+  async () => textResult(new Date().toISOString())
+);
+
+// MCP server with multiple tools
+const mathServer = new McpServerBuilder('math', '1.0.0')
+  .addTool({
+    name: 'add',
+    description: 'Add two numbers',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        a: { type: 'number' },
+        b: { type: 'number' },
+      },
+      required: ['a', 'b'],
+    },
+    handler: async ({ a, b }) => textResult(String(a + b)),
+  })
+  .addTool({
+    name: 'multiply',
+    description: 'Multiply two numbers',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        a: { type: 'number' },
+        b: { type: 'number' },
+      },
+      required: ['a', 'b'],
+    },
+    handler: async ({ a, b }) => textResult(String(a * b)),
+  })
+  .build();
+
+// Use in session
+const client = new ChuckyClient({ token });
+const session = await client.createSession({
+  tools: [timeTool],
+  mcpServers: [mathServer],
+});
+
+const result = await session.send('What time is it? And what is 7 times 8?');
+console.log(result.text);
+```

@@ -1,97 +1,103 @@
 ---
-title: "Introduction"
-description: "Welcome to the new home for your documentation"
+title: Introduction
+description: Claude as a Service - Deploy AI agents with managed infrastructure
 ---
 
-## Setting up
+# Chucky SDK
 
-Get your documentation site up and running in minutes.
+Chucky provides **Claude as a Service** - a fully managed infrastructure for deploying AI agents powered by Claude. Build conversational AI applications without managing servers, handling authentication complexity, or worrying about scaling.
 
-<Card
-  title="Start here"
-  icon="rocket"
-  href="/quickstart"
-  horizontal
->
-  Follow our three step quickstart guide.
-</Card>
+## What is Chucky?
 
-## Make it yours
+Chucky is a platform that lets you integrate Claude into your applications with:
 
-Design a docs site that looks great and empowers your users.
+- **Managed Infrastructure**: Sandboxed execution environments running on Cloudflare's edge network
+- **Built-in Billing**: Per-user budget controls with real-time usage tracking
+- **Multi-language SDKs**: First-class support for JavaScript/TypeScript and Python
+- **Tool Execution**: Define custom tools that run on the server or in the browser
+- **Session Persistence**: Multi-turn conversations with automatic state management
 
-<Columns cols={2}>
-  <Card
-    title="Edit locally"
-    icon="pen-to-square"
-    href="/development"
-  >
-    Edit your docs locally and preview them in real time.
+## Architecture
+
+```
+┌─────────────────┐     WebSocket      ┌──────────────────┐
+│   Your App      │ ◄─────────────────► │  Chucky Cloud    │
+│ (Browser/Node)  │                     │  (Edge Network)  │
+└─────────────────┘                     └────────┬─────────┘
+                                                 │
+                                                 ▼
+                                        ┌──────────────────┐
+                                        │   Claude API     │
+                                        │   (Anthropic)    │
+                                        └──────────────────┘
+```
+
+## Key Features
+
+<CardGroup cols={2}>
+  <Card title="Simple Integration" icon="plug">
+    One SDK, same API for browser and Node.js. WebSocket-based real-time communication.
   </Card>
-  <Card
-    title="Customize your site"
-    icon="palette"
-    href="/essentials/settings"
-  >
-    Customize the design and colors of your site to match your brand.
+  <Card title="Budget Controls" icon="wallet">
+    Set per-user AI and compute budgets. Track usage in real-time with automatic limits.
   </Card>
-    <Card
-    title="Set up navigation"
-    icon="map"
-    href="/essentials/navigation"
-  >
-    Organize your docs to help users find what they need and succeed with your product.
+  <Card title="Custom Tools" icon="wrench">
+    Define tools that Claude can call. Execute in browser or server context.
   </Card>
-  <Card
-    title="API documentation"
-    icon="terminal"
-    href="/api-reference/introduction"
-  >
-    Auto-generate API documentation from OpenAPI specifications.
+  <Card title="Session Management" icon="comments">
+    Multi-turn conversations with automatic persistence. Resume sessions anytime.
   </Card>
-</Columns>
+</CardGroup>
 
-## Create beautiful pages
+## Quick Example
 
-Everything you need to create world-class documentation.
+<CodeGroup>
+```typescript TypeScript
+import { ChuckyClient } from '@chucky.cloud/sdk';
 
-<Columns cols={2}>
-  <Card
-    title="Write with MDX"
-    icon="pen-fancy"
-    href="/essentials/markdown"
-  >
-    Use MDX to style your docs pages.
-  </Card>
-  <Card
-    title="Code samples"
-    icon="code"
-    href="/essentials/code"
-  >
-    Add sample code to demonstrate how to use your product.
-  </Card>
-  <Card
-    title="Images"
-    icon="image"
-    href="/essentials/images"
-  >
-    Display images and other media.
-  </Card>
-  <Card
-    title="Reusable snippets"
-    icon="recycle"
-    href="/essentials/reusable-snippets"
-  >
-    Write once and reuse across your docs.
-  </Card>
-</Columns>
+const client = new ChuckyClient({ token: 'your-jwt-token' });
 
-## Need inspiration?
+// Simple prompt
+const result = await client.prompt({
+  message: 'Explain quantum computing in simple terms',
+  model: 'claude-sonnet-4-5-20250929',
+});
 
-<Card
-  title="See complete examples"
-  icon="stars"
-  href="https://mintlify.com/customers"
->
-  Browse our showcase of exceptional documentation sites.
-</Card>
+console.log(result.text);
+```
+
+```python Python
+from chucky import Chucky
+
+client = Chucky(token='your-jwt-token')
+
+# Simple prompt
+result = await client.prompt('Explain quantum computing in simple terms')
+print(result.result)
+```
+</CodeGroup>
+
+## Supported Models
+
+| Model | Description | Best For |
+|-------|-------------|----------|
+| `claude-sonnet-4-5-20250929` | Fast, capable | Most use cases |
+| `claude-opus-4-5-20251101` | Most powerful | Complex reasoning |
+| `claude-3-5-haiku-20241022` | Fastest | Simple tasks, high volume |
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Quickstart" icon="rocket" href="/quickstart">
+    Get up and running in 5 minutes
+  </Card>
+  <Card title="Authentication" icon="key" href="/authentication">
+    Learn about tokens and budgets
+  </Card>
+  <Card title="Tools" icon="wrench" href="/concepts/tools">
+    Create custom tools for Claude
+  </Card>
+  <Card title="SDK Reference" icon="book" href="/sdk/javascript/client">
+    Complete API documentation
+  </Card>
+</CardGroup>

@@ -1,43 +1,51 @@
-# Mintlify Starter Kit
+# Chucky SDK Documentation
 
-Use the starter kit to get your docs deployed and ready to customize.
+Documentation for the Chucky SDK - Claude as a Service.
 
-Click the green **Use this template** button at the top of this repo to copy the Mintlify starter kit. The starter kit contains examples with
+## Structure
 
-- Guide pages
-- Navigation
-- Customizations
-- API reference pages
-- Use of popular components
-
-**[Follow the full quickstart guide](https://starter.mintlify.com/quickstart)**
+```
+docs/
+├── index.mdx              # Introduction
+├── quickstart.mdx         # Getting started guide
+├── authentication.mdx     # Token and budget management
+├── concepts/
+│   ├── sessions.mdx       # Multi-turn conversations
+│   ├── tools.mdx          # Custom tools
+│   ├── mcp-servers.mdx    # MCP server bundles
+│   └── streaming.mdx      # Streaming responses
+├── advanced/
+│   ├── error-handling.mdx # Error handling
+│   ├── budget-management.mdx # Budget strategies
+│   └── workspace.mdx      # Workspace configuration
+└── sdk/
+    ├── javascript/        # JS/TS SDK reference
+    │   ├── client.mdx
+    │   ├── session.mdx
+    │   ├── tools.mdx
+    │   └── types.mdx
+    └── python/            # Python SDK reference
+        ├── client.mdx
+        ├── tools.mdx
+        └── types.mdx
+```
 
 ## Development
 
-Install the [Mintlify CLI](https://www.npmjs.com/package/mint) to preview your documentation changes locally. To install, use the following command:
+Install the [Mintlify CLI](https://www.npmjs.com/package/mint) to preview locally:
 
-```
+```bash
 npm i -g mint
 ```
 
-Run the following command at the root of your documentation, where your `docs.json` is located:
+Run the dev server:
 
-```
+```bash
 mint dev
 ```
 
-View your local preview at `http://localhost:3000`.
+View at `http://localhost:3000`.
 
-## Publishing changes
+## Publishing
 
-Install our GitHub app from your [dashboard](https://dashboard.mintlify.com/settings/organization/github-app) to propagate changes from your repo to your deployment. Changes are deployed to production automatically after pushing to the default branch.
-
-## Need help?
-
-### Troubleshooting
-
-- If your dev environment isn't running: Run `mint update` to ensure you have the most recent version of the CLI.
-- If a page loads as a 404: Make sure you are running in a folder with a valid `docs.json`.
-
-### Resources
-- [Mintlify documentation](https://mintlify.com/docs)
+Changes pushed to the default branch are automatically deployed.

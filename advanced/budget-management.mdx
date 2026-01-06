@@ -1,0 +1,336 @@
+---
+title: Budget Management
+description: Control costs with AI and compute budgets
+---
+
+# Budget Management
+
+Chucky provides granular budget controls to help you manage costs and prevent unexpected charges.
+
+## Budget Types
+
+### AI Budget
+
+Controls spending on Claude API calls:
+- Measured in **dollars** (or microdollars in the raw API)
+- Covers input tokens, output tokens, and cache usage
+- Resets based on the window period
+
+### Compute Budget
+
+Controls sandbox execution time:
+- Measured in **seconds** (or hours in the helper)
+- Covers time the sandbox is running
+- Useful for preventing runaway processes
+
+## Setting Budgets
+
+### Using the Helper
+
+```typescript
+import { createBudget } from '@chucky.cloud/sdk';
+
+const budget = createBudget({
+  aiDollars: 5.00,      // $5 for AI calls
+  computeHours: 2,      // 2 hours of compute
+  window: 'day',        // Reset daily
+});
+```
+
+### Raw Format
+
+```typescript
+const budget = {
+  ai: 5_000_000,                    // $5 in microdollars
+  compute: 7200,                    // 2 hours in seconds
+  window: 'day',
+  windowStart: new Date().toISOString(),
+};
+```
+
+## Budget Windows
+
+| Window | Duration | Use Case |
+|--------|----------|----------|
+| `hour` | 60 minutes | Rate limiting, trial users |
+| `day` | 24 hours | Daily quotas |
+| `week` | 7 days | Weekly allowances |
+| `month` | Calendar month | Subscription billing |
+
+### Window Start
+
+The window starts at the `windowStart` time in the token:
+
+```typescript
+// Start of today at midnight UTC
+const budget = createBudget({
+  aiDollars: 10,
+  computeHours: 5,
+  window: 'day',
+  windowStart: new Date(new Date().setUTCHours(0, 0, 0, 0)),
+});
+```
+
+## Budget Enforcement
+
+### Per-User Limits
+
+Each user gets their own budget based on their token:
+
+```typescript
+// Free tier user
+const freeToken = await createToken({
+  userId: 'user-123',
+  budget: createBudget({
+    aiDollars: 0.10,     // 10 cents
+    computeHours: 0.1,   // 6 minutes
+    window: 'day',
+  }),
+});
+
+// Premium user
+const premiumToken = await createToken({
+  userId: 'user-456',
+  budget: createBudget({
+    aiDollars: 10.00,    // $10
+    computeHours: 5,     // 5 hours
+    window: 'day',
+  }),
+});
+```
+
+### Session Budget Limits
+
+Additionally limit individual sessions:
+
+```typescript
+const session = await client.createSession({
+  maxBudgetUsd: 0.50, // Max $0.50 per session
+});
+```
+
+## Cost Tracking
+
+### In Results
+
+```typescript
+const result = await client.prompt({ message: 'Hello' });
+console.log('Cost:', result.total_cost_usd);
+console.log('Duration:', result.duration_secs);
+```
+
+### Usage Details
+
+```typescript
+const result = await session.send('Complex query...');
+console.log('Input tokens:', result.usage?.input_tokens);
+console.log('Output tokens:', result.usage?.output_tokens);
+console.log('Cache tokens:', result.usage?.cache_read_input_tokens);
+```
+
+## Budget Exceeded Handling
+
+When a user exceeds their budget:
+
+```typescript
+try {
+  const result = await client.prompt({ message: 'Hello' });
+} catch (error) {
+  if (error instanceof BudgetExceededError) {
+    const { budgetType, used, limit } = error.details || {};
+
+    if (budgetType === 'ai') {
+      // AI budget exceeded
+      showUpgradePrompt({
+        message: 'You\'ve used your AI budget',
+        used: formatDollars(used),
+        limit: formatDollars(limit),
+      });
+    } else {
+      // Compute budget exceeded
+      showUpgradePrompt({
+        message: 'You\'ve used your compute time',
+        used: formatDuration(used),
+        limit: formatDuration(limit),
+      });
+    }
+  }
+}
+```
+
+## Pricing Guide
+
+Approximate costs (check Anthropic pricing for current rates):
+
+| Model | Input (per 1M tokens) | Output (per 1M tokens) |
+|-------|----------------------|------------------------|
+| claude-sonnet-4-5 | $3.00 | $15.00 |
+| claude-opus-4-5 | $15.00 | $75.00 |
+| claude-3-5-haiku | $0.25 | $1.25 |
+
+### Cost Estimation
+
+```typescript
+function estimateCost(inputTokens: number, outputTokens: number, model: string) {
+  const pricing = {
+    'claude-sonnet-4-5-20250929': { input: 3, output: 15 },
+    'claude-opus-4-5-20251101': { input: 15, output: 75 },
+    'claude-3-5-haiku-20241022': { input: 0.25, output: 1.25 },
+  };
+
+  const rates = pricing[model] || pricing['claude-sonnet-4-5-20250929'];
+  const inputCost = (inputTokens / 1_000_000) * rates.input;
+  const outputCost = (outputTokens / 1_000_000) * rates.output;
+
+  return inputCost + outputCost;
+}
+```
+
+## Budget Strategies
+
+### Tiered Access
+
+```typescript
+const TIERS = {
+  free: {
+    aiDollars: 0.10,
+    computeHours: 0.1,
+    model: 'claude-3-5-haiku-20241022',
+    maxTurns: 5,
+  },
+  starter: {
+    aiDollars: 5.00,
+    computeHours: 2,
+    model: 'claude-sonnet-4-5-20250929',
+    maxTurns: 20,
+  },
+  pro: {
+    aiDollars: 50.00,
+    computeHours: 10,
+    model: 'claude-sonnet-4-5-20250929',
+    maxTurns: 100,
+  },
+  enterprise: {
+    aiDollars: 500.00,
+    computeHours: 50,
+    model: 'claude-opus-4-5-20251101',
+    maxTurns: null, // Unlimited
+  },
+};
+
+function createTierToken(userId: string, tier: keyof typeof TIERS) {
+  const config = TIERS[tier];
+
+  return createToken({
+    userId,
+    projectId: process.env.PROJECT_ID,
+    secret: process.env.HMAC_SECRET,
+    budget: createBudget({
+      aiDollars: config.aiDollars,
+      computeHours: config.computeHours,
+      window: 'month',
+    }),
+    sdkConfig: {
+      model: config.model,
+      maxTurns: config.maxTurns,
+    },
+  });
+}
+```
+
+### Pay-as-you-go
+
+For users with payment methods, allow higher limits:
+
+```typescript
+async function createPayAsYouGoToken(userId: string) {
+  const user = await getUser(userId);
+
+  if (!user.hasPaymentMethod) {
+    // Limited budget for non-paying users
+    return createToken({
+      userId,
+      budget: createBudget({
+        aiDollars: 0.50,
+        computeHours: 0.5,
+        window: 'day',
+      }),
+    });
+  }
+
+  // Higher limits for paying users (charged post-usage)
+  return createToken({
+    userId,
+    budget: createBudget({
+      aiDollars: 100.00,
+      computeHours: 24,
+      window: 'month',
+    }),
+  });
+}
+```
+
+### Cost Alerts
+
+```typescript
+class BudgetMonitor {
+  private alerts = new Map<string, number[]>();
+
+  constructor(private thresholds = [0.5, 0.8, 0.95]) {}
+
+  checkBudget(userId: string, used: number, limit: number) {
+    const ratio = used / limit;
+    const userAlerts = this.alerts.get(userId) || [];
+
+    for (const threshold of this.thresholds) {
+      if (ratio >= threshold && !userAlerts.includes(threshold)) {
+        this.sendAlert(userId, threshold, used, limit);
+        userAlerts.push(threshold);
+      }
+    }
+
+    this.alerts.set(userId, userAlerts);
+  }
+
+  private sendAlert(userId: string, threshold: number, used: number, limit: number) {
+    const percent = Math.round(threshold * 100);
+    console.log(`User ${userId} has used ${percent}% of budget: $${used.toFixed(2)}/$${limit.toFixed(2)}`);
+    // Send email/notification
+  }
+}
+```
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Start conservative">
+    Begin with small budgets and increase based on actual usage patterns. It's easier to increase limits than to deal with unexpected charges.
+  </Accordion>
+
+  <Accordion title="Use session limits">
+    Even with generous user budgets, set session limits to prevent single queries from consuming all resources.
+
+    ```typescript
+    const session = await client.createSession({
+      maxBudgetUsd: 1.00, // Cap any single session
+      maxTurns: 20,
+    });
+    ```
+  </Accordion>
+
+  <Accordion title="Monitor usage">
+    Track usage patterns to optimize your pricing tiers and identify cost outliers.
+  </Accordion>
+
+  <Accordion title="Graceful degradation">
+    When budgets are near limits, offer alternatives rather than hard failures:
+
+    ```typescript
+    if (budgetRemaining < 0.10) {
+      // Suggest cheaper model
+      showMessage('Running low on budget. Switching to faster model.');
+      options.model = 'claude-3-5-haiku-20241022';
+    }
+    ```
+  </Accordion>
+</AccordionGroup>

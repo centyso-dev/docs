@@ -1,0 +1,310 @@
+---
+title: Workspaces
+description: Pre-configure sandbox environments with custom files and dependencies
+---
+
+# Workspaces
+
+Workspaces let you pre-configure the sandbox environment with files, dependencies, and settings. This is useful for:
+
+- Providing context (documentation, code, data files)
+- Pre-installing dependencies
+- Setting up configuration files
+- Creating custom development environments
+
+## How Workspaces Work
+
+1. You upload a `workspace.tgz` file to your project in the portal
+2. When a session starts, the workspace is extracted to `/workspace/project`
+3. Claude has access to all files in the workspace
+4. Tools can read/write files in the workspace
+
+```
+┌─────────────────┐     Upload        ┌──────────────────┐
+│  Your Files     │ ────────────────► │  Chucky Portal   │
+│  workspace.tgz  │                   │  (R2 Storage)    │
+└─────────────────┘                   └────────┬─────────┘
+                                               │
+                                               ▼ Session start
+                                      ┌──────────────────┐
+                                      │  Sandbox         │
+                                      │  /workspace/     │
+                                      │    project/      │
+                                      │      your files  │
+                                      └──────────────────┘
+```
+
+## Creating a Workspace
+
+### Step 1: Prepare Files
+
+Create a directory with your workspace files:
+
+```bash
+mkdir my-workspace
+cd my-workspace
+
+# Add your files
+cp -r ../my-project/* .
+echo "Custom configuration" > config.json
+```
+
+### Step 2: Create Archive
+
+Package as a tar.gz archive:
+
+```bash
+tar -czvf workspace.tgz -C my-workspace .
+```
+
+### Step 3: Upload
+
+Upload via the Chucky Portal:
+1. Go to [portal.chucky.cloud](https://portal.chucky.cloud)
+2. Select your project
+3. Navigate to Workspace settings
+4. Upload `workspace.tgz`
+
+## Workspace Contents
+
+Common things to include:
+
+### Documentation
+
+```
+workspace/
+├── docs/
+│   ├── README.md
+│   ├── API.md
+│   └── ARCHITECTURE.md
+```
+
+### Code Context
+
+```
+workspace/
+├── src/
+│   ├── index.ts
+│   ├── utils.ts
+│   └── types.ts
+├── package.json
+└── tsconfig.json
+```
+
+### Data Files
+
+```
+workspace/
+├── data/
+│   ├── products.json
+│   ├── users.csv
+│   └── config.yaml
+```
+
+### Templates
+
+```
+workspace/
+├── templates/
+│   ├── component.tsx
+│   ├── api-route.ts
+│   └── test.spec.ts
+```
+
+## Alternative: Git Repositories
+
+Instead of uploading a workspace file, you can configure a Git repository:
+
+### In Portal Settings
+
+```json
+{
+  "git": {
+    "url": "https://github.com/your-org/your-repo.git",
+    "ref": "main",
+    "token": "ghp_xxxxx"  // For private repos
+  }
+}
+```
+
+### Benefits of Git
+
+- **Always up-to-date**: Latest code on each session
+- **Branch selection**: Test different branches
+- **No manual uploads**: Automatic syncing
+
+### Git Configuration
+
+| Option | Description |
+|--------|-------------|
+| `url` | Repository URL (HTTPS or SSH) |
+| `ref` | Branch, tag, or commit (default: `main`) |
+| `token` | Personal access token for private repos |
+| `depth` | Shallow clone depth (default: 1) |
+
+## Accessing Workspace Files
+
+### In Tools
+
+```typescript
+const readFileTool = tool(
+  'read_project_file',
+  'Read a file from the project workspace',
+  {
+    type: 'object',
+    properties: {
+      path: { type: 'string', description: 'File path relative to workspace' },
+    },
+    required: ['path'],
+  },
+  async ({ path }) => {
+    // Files are at /workspace/project/
+    const fullPath = `/workspace/project/${path}`;
+    const content = await fs.readFile(fullPath, 'utf-8');
+    return textResult(content);
+  }
+);
+```
+
+### Claude Access
+
+Claude can reference workspace files using built-in tools:
+
+```
+User: "What's in the README?"
+Claude: [Uses Read tool to read /workspace/project/README.md]
+Claude: "The README contains..."
+```
+
+## Session Persistence
+
+Session state is saved separately from the workspace:
+
+- **Workspace**: Shared across all users (read-only during session)
+- **Session state**: Per-user, persists between sessions
+
+Session files are stored at:
+- `/root/.claude/` - Claude's memory and context
+- `/root/.claude.json` - Session configuration
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Keep workspaces small">
+    Large workspaces increase session startup time. Only include files Claude needs.
+
+    **Do include:**
+    - Documentation
+    - Type definitions
+    - Configuration files
+    - Small code samples
+
+    **Don't include:**
+    - node_modules
+    - Build artifacts
+    - Large binary files
+    - Unnecessary dependencies
+  </Accordion>
+
+  <Accordion title="Use .gitignore patterns">
+    Before creating the archive, exclude unnecessary files:
+
+    ```bash
+    # Create archive excluding common junk
+    tar --exclude='node_modules' \
+        --exclude='.git' \
+        --exclude='dist' \
+        --exclude='*.log' \
+        -czvf workspace.tgz -C my-workspace .
+    ```
+  </Accordion>
+
+  <Accordion title="Include a manifest">
+    Add a file describing the workspace contents:
+
+    ```json
+    // workspace.json
+    {
+      "name": "my-project",
+      "description": "E-commerce API codebase",
+      "version": "1.0.0",
+      "structure": {
+        "src/": "Source code",
+        "docs/": "Documentation",
+        "data/": "Sample data files"
+      }
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="Version your workspaces">
+    Track workspace versions to know what Claude is working with:
+
+    ```bash
+    tar -czvf workspace-v1.2.3.tgz -C my-workspace .
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Example: Documentation Bot
+
+Create a workspace for a documentation assistant:
+
+```bash
+# Create workspace
+mkdir doc-workspace
+cd doc-workspace
+
+# Copy documentation
+cp -r ../docs/* .
+
+# Add context file
+cat > CONTEXT.md << 'EOF'
+# Documentation Assistant Context
+
+You are a documentation assistant for the Acme API.
+
+## Available Documentation
+- `api/` - API reference docs
+- `guides/` - Tutorial guides
+- `examples/` - Code examples
+
+## Your Role
+- Answer questions about the API
+- Provide code examples
+- Explain concepts from the docs
+EOF
+
+# Package
+tar -czvf ../doc-workspace.tgz .
+```
+
+## Example: Code Review Bot
+
+```bash
+mkdir review-workspace
+cd review-workspace
+
+# Copy codebase
+cp -r ../my-codebase/* .
+
+# Add review guidelines
+cat > REVIEW_GUIDELINES.md << 'EOF'
+# Code Review Guidelines
+
+When reviewing code, check for:
+
+1. **Correctness**: Does the code do what it's supposed to?
+2. **Security**: Are there any security vulnerabilities?
+3. **Performance**: Are there obvious performance issues?
+4. **Style**: Does it follow project conventions?
+5. **Tests**: Are there adequate tests?
+
+## Project Conventions
+- Use TypeScript strict mode
+- Prefer async/await over callbacks
+- Use descriptive variable names
+EOF
+
+tar -czvf ../review-workspace.tgz .
+```

@@ -1,0 +1,385 @@
+---
+title: Tools
+description: Give Claude the ability to take actions
+---
+
+# Tools
+
+Tools let Claude interact with the outside world - query databases, call APIs, manipulate files, or perform any action your application needs.
+
+## How Tools Work
+
+1. You define tools with a name, description, and input schema
+2. Claude decides when to use a tool based on the conversation
+3. The SDK executes the tool handler with Claude's inputs
+4. Claude receives the result and continues the conversation
+
+```
+User: "What's the weather in Tokyo?"
+         ↓
+Claude: [Decides to call get_weather tool]
+         ↓
+SDK: [Executes get_weather({ city: 'Tokyo' })]
+         ↓
+Tool: [Returns "Sunny, 22°C"]
+         ↓
+Claude: "The weather in Tokyo is sunny with a temperature of 22°C."
+```
+
+## Creating Tools
+
+### Using `tool()` Helper
+
+The simplest way to create a tool:
+
+```typescript
+import { tool } from '@chucky.cloud/sdk';
+
+const greetTool = tool(
+  'greet',                              // Name
+  'Greet a person by name',             // Description
+  {                                     // Input schema (JSON Schema)
+    type: 'object',
+    properties: {
+      name: { type: 'string', description: 'Person name' },
+      formal: { type: 'boolean', description: 'Use formal greeting' },
+    },
+    required: ['name'],
+  },
+  async ({ name, formal }) => ({        // Handler
+    content: [{
+      type: 'text',
+      text: formal ? `Good day, ${name}.` : `Hey ${name}!`,
+    }],
+  })
+);
+```
+
+### Using `createTool()`
+
+More explicit tool creation:
+
+```typescript
+import { createTool } from '@chucky.cloud/sdk';
+
+const weatherTool = createTool({
+  name: 'get_weather',
+  description: 'Get current weather for a location',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      city: { type: 'string', description: 'City name' },
+      unit: {
+        type: 'string',
+        enum: ['celsius', 'fahrenheit'],
+        description: 'Temperature unit',
+      },
+    },
+    required: ['city'],
+  },
+  handler: async ({ city, unit = 'celsius' }) => {
+    const weather = await fetchWeatherAPI(city, unit);
+    return {
+      content: [{
+        type: 'text',
+        text: `${city}: ${weather.temp}°${unit === 'celsius' ? 'C' : 'F'}, ${weather.condition}`,
+      }],
+    };
+  },
+});
+```
+
+### Python Tool Decorator
+
+In Python, use the `@tool` decorator:
+
+```python
+from chucky import tool, text_result
+
+@tool('get_weather', 'Get current weather for a location')
+async def get_weather(
+    city: str,
+    unit: Literal['celsius', 'fahrenheit'] = 'celsius',
+) -> ToolResult:
+    """
+    Args:
+        city: City name
+        unit: Temperature unit
+    """
+    weather = await fetch_weather_api(city, unit)
+    return text_result(f'{city}: {weather.temp}°, {weather.condition}')
+```
+
+## Tool Input Schema
+
+Tools use JSON Schema to define their inputs:
+
+```typescript
+const schema = {
+  type: 'object',
+  properties: {
+    // String with description
+    query: {
+      type: 'string',
+      description: 'Search query',
+    },
+    // Number with constraints
+    limit: {
+      type: 'number',
+      minimum: 1,
+      maximum: 100,
+      default: 10,
+    },
+    // Enum (fixed options)
+    sort: {
+      type: 'string',
+      enum: ['relevance', 'date', 'rating'],
+    },
+    // Array
+    tags: {
+      type: 'array',
+      items: { type: 'string' },
+    },
+    // Nested object
+    options: {
+      type: 'object',
+      properties: {
+        includeImages: { type: 'boolean' },
+      },
+    },
+  },
+  required: ['query'],
+};
+```
+
+## Tool Results
+
+Tools return a `ToolResult` object:
+
+```typescript
+interface ToolResult {
+  content: ContentBlock[];
+  isError?: boolean;
+}
+
+type ContentBlock =
+  | { type: 'text'; text: string }
+  | { type: 'image'; data: string; mimeType: string };
+```
+
+### Result Helpers
+
+```typescript
+import { textResult, errorResult, imageResult } from '@chucky.cloud/sdk';
+
+// Text result
+return textResult('Operation completed successfully');
+
+// Error result
+return errorResult('File not found');
+
+// Image result (base64)
+return imageResult(base64Data, 'image/png');
+
+// Multiple content blocks
+return {
+  content: [
+    { type: 'text', text: 'Here is the chart:' },
+    { type: 'image', data: chartBase64, mimeType: 'image/png' },
+  ],
+};
+```
+
+## Using Tools
+
+### In Sessions
+
+```typescript
+const session = await client.createSession({
+  model: 'claude-sonnet-4-5-20250929',
+  tools: [greetTool, weatherTool, searchTool],
+});
+
+const result = await session.send(
+  'Greet Alice formally, then tell me the weather in Paris'
+);
+```
+
+### In Prompts
+
+```typescript
+const result = await client.prompt({
+  message: 'What is the weather in London?',
+  tools: [weatherTool],
+});
+```
+
+## Tool Execution Location
+
+Tools can execute in different locations:
+
+### Server Tools
+
+Execute on the Chucky server (default). Define schema only, handler runs server-side:
+
+```typescript
+const dbTool = createTool({
+  name: 'query_database',
+  description: 'Query the database',
+  inputSchema: { ... },
+  executeIn: 'server',
+  // No handler - executed server-side
+});
+```
+
+### Browser Tools
+
+Execute in the user's browser:
+
+```typescript
+import { browserTool } from '@chucky.cloud/sdk';
+
+const alertTool = browserTool({
+  name: 'show_alert',
+  description: 'Show an alert dialog',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      message: { type: 'string' },
+    },
+    required: ['message'],
+  },
+  handler: async ({ message }) => {
+    alert(message);
+    return textResult('Alert shown');
+  },
+});
+```
+
+Browser tools can:
+- Access the DOM
+- Show UI elements
+- Read local storage
+- Interact with browser APIs
+
+## Tool Best Practices
+
+<AccordionGroup>
+  <Accordion title="Write clear descriptions">
+    Claude uses descriptions to decide when to use tools. Be specific about what the tool does and when it should be used.
+
+    ```typescript
+    // Good
+    description: 'Search for products by name, category, or price range. Returns up to 10 matching products with prices and availability.'
+
+    // Bad
+    description: 'Search products'
+    ```
+  </Accordion>
+
+  <Accordion title="Validate inputs">
+    Always validate inputs in your handler, even though the schema provides basic validation:
+
+    ```typescript
+    handler: async ({ email }) => {
+      if (!isValidEmail(email)) {
+        return errorResult('Invalid email format');
+      }
+      // ...
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="Handle errors gracefully">
+    Return informative error messages so Claude can respond appropriately:
+
+    ```typescript
+    handler: async ({ id }) => {
+      try {
+        const item = await database.find(id);
+        if (!item) {
+          return errorResult(`Item ${id} not found`);
+        }
+        return textResult(JSON.stringify(item));
+      } catch (err) {
+        return errorResult(`Database error: ${err.message}`);
+      }
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="Keep tools focused">
+    Each tool should do one thing well. Instead of one complex tool, create multiple simple tools:
+
+    ```typescript
+    // Good: Separate tools
+    const searchProducts = tool('search_products', ...);
+    const getProductDetails = tool('get_product', ...);
+    const addToCart = tool('add_to_cart', ...);
+
+    // Bad: One mega-tool
+    const productTool = tool('product_operations', ...);
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Example: Calculator Tool
+
+```typescript
+const calculatorTool = tool(
+  'calculate',
+  'Perform mathematical calculations. Supports basic arithmetic, percentages, and common math functions.',
+  {
+    type: 'object',
+    properties: {
+      expression: {
+        type: 'string',
+        description: 'Mathematical expression to evaluate (e.g., "2 + 2", "sqrt(16)", "15% of 200")',
+      },
+    },
+    required: ['expression'],
+  },
+  async ({ expression }) => {
+    try {
+      // Safe expression evaluation (use a proper math library in production)
+      const result = evaluateMathExpression(expression);
+      return textResult(`${expression} = ${result}`);
+    } catch (err) {
+      return errorResult(`Could not evaluate: ${expression}`);
+    }
+  }
+);
+
+// Usage
+const result = await client.prompt({
+  message: 'What is 15% of 230, plus the square root of 144?',
+  tools: [calculatorTool],
+});
+// Claude will call calculate twice and combine the results
+```
+
+## Example: Web Search Tool
+
+```typescript
+const searchTool = tool(
+  'web_search',
+  'Search the web for current information. Use for recent events, facts, or topics that may have changed.',
+  {
+    type: 'object',
+    properties: {
+      query: { type: 'string', description: 'Search query' },
+      limit: { type: 'number', description: 'Max results (1-10)', default: 5 },
+    },
+    required: ['query'],
+  },
+  async ({ query, limit = 5 }) => {
+    const results = await searchAPI.search(query, { limit });
+
+    const formatted = results.map((r, i) =>
+      `${i + 1}. ${r.title}\n   ${r.url}\n   ${r.snippet}`
+    ).join('\n\n');
+
+    return textResult(`Search results for "${query}":\n\n${formatted}`);
+  }
+);
+```
