@@ -43,13 +43,17 @@ Tokens authenticate users and set their usage budgets. **Always create tokens on
 
 <CodeGroup>
 ```typescript TypeScript (Server)
-import { createToken, createBudget } from '@chucky.cloud/sdk';
+import { createToken, createBudget, extractProjectId } from '@chucky.cloud/sdk';
+
+// Your HMAC key contains the project ID (hk_live_... → UUID)
+const hmacKey = process.env.HMAC_SECRET;
+const projectId = extractProjectId(hmacKey);
 
 // Create a token for a user
 const token = await createToken({
-  userId: 'user-123',              // Your user's ID
-  projectId: 'your-project-uuid',  // From app.chucky.cloud
-  secret: process.env.HMAC_SECRET, // Your HMAC secret
+  userId: 'user-123',
+  projectId,
+  secret: hmacKey,
   expiresIn: 3600,                 // 1 hour
   budget: createBudget({
     aiDollars: 1.00,               // $1 AI budget
@@ -63,14 +67,18 @@ return { token };
 ```
 
 ```python Python (Server)
-from chucky import create_token, create_budget
+from chucky import create_token, create_budget, extract_project_id
 import os
+
+# Your HMAC key contains the project ID (hk_live_... → UUID)
+hmac_key = os.environ['HMAC_SECRET']
+project_id = extract_project_id(hmac_key)
 
 # Create a token for a user
 token = create_token(
     user_id='user-123',
-    project_id='your-project-uuid',
-    secret=os.environ['HMAC_SECRET'],
+    project_id=project_id,
+    secret=hmac_key,
     expires_in=3600,
     budget=create_budget(
         ai_dollars=1.00,

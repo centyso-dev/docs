@@ -32,14 +32,19 @@ Chucky uses JWT (JSON Web Tokens) for authentication. Tokens are created server-
 
 ### Basic Token
 
+The `projectId` is embedded in your HMAC key. Use `extractProjectId()` to derive it:
+
 <CodeGroup>
-```typescript TypeScript
-import { createToken, createBudget } from '@chucky.cloud/sdk';
+```typescript TypeScript (Server)
+import { createToken, createBudget, extractProjectId } from '@chucky.cloud/sdk';
+
+const hmacKey = process.env.HMAC_SECRET; // hk_live_938642b649c64cc3975e504c0fbcbbd8
+const projectId = extractProjectId(hmacKey); // 938642b6-49c6-4cc3-975e-504c0fbcbbd8
 
 const token = await createToken({
   userId: 'user-123',
-  projectId: 'your-project-uuid',
-  secret: process.env.HMAC_SECRET,
+  projectId,
+  secret: hmacKey,
   budget: createBudget({
     aiDollars: 1.00,
     computeHours: 1,
@@ -48,13 +53,16 @@ const token = await createToken({
 });
 ```
 
-```python Python
-from chucky import create_token, create_budget
+```python Python (Server)
+from chucky import create_token, create_budget, extract_project_id
+
+hmac_key = os.environ['HMAC_SECRET']  # hk_live_938642b649c64cc3975e504c0fbcbbd8
+project_id = extract_project_id(hmac_key)  # 938642b6-49c6-4cc3-975e-504c0fbcbbd8
 
 token = create_token(
     user_id='user-123',
-    project_id='your-project-uuid',
-    secret=os.environ['HMAC_SECRET'],
+    project_id=project_id,
+    secret=hmac_key,
     budget=create_budget(
         ai_dollars=1.00,
         compute_hours=1,
@@ -64,13 +72,18 @@ token = create_token(
 ```
 </CodeGroup>
 
+<Info>
+  The HMAC key format is `hk_live_{32-char-hex}`. The hex portion is your project UUID without dashes.
+  Example: `hk_live_938642b649c64cc3975e504c0fbcbbd8` → Project ID: `938642b6-49c6-4cc3-975e-504c0fbcbbd8`
+</Info>
+
 ### Token Options
 
 | Option | Type | Required | Description |
 |--------|------|----------|-------------|
 | `userId` | `string` | Yes | Unique identifier for the user |
-| `projectId` | `string` | Yes | Your project UUID from portal |
-| `secret` | `string` | Yes | HMAC secret from project settings |
+| `projectId` | `string` | Yes | Derived from HMAC key via `extractProjectId()` |
+| `secret` | `string` | Yes | Your HMAC key (`hk_live_...`) from project settings |
 | `budget` | `TokenBudget` | Yes | Budget configuration |
 | `expiresIn` | `number` | No | Token validity in seconds (default: 3600) |
 | `permissions` | `object` | No | Optional permission constraints |
@@ -110,10 +123,13 @@ const budget = createBudget({
 If you need more control, you can specify the raw budget format:
 
 ```typescript
+const hmacKey = process.env.HMAC_SECRET;
+const projectId = extractProjectId(hmacKey);
+
 const token = await createToken({
   userId: 'user-123',
-  projectId: 'project-uuid',
-  secret: 'hmac-secret',
+  projectId,
+  secret: hmacKey,
   budget: {
     ai: 5_000_000,          // 5 USD in microdollars
     compute: 7200,          // 2 hours in seconds
@@ -132,10 +148,13 @@ const token = await createToken({
 Restrict what users can do with their token:
 
 ```typescript
+const hmacKey = process.env.HMAC_SECRET;
+const projectId = extractProjectId(hmacKey);
+
 const token = await createToken({
   userId: 'user-123',
-  projectId: 'project-uuid',
-  secret: 'hmac-secret',
+  projectId,
+  secret: hmacKey,
   budget: createBudget({ aiDollars: 1, computeHours: 1, window: 'day' }),
   permissions: {
     tools: ['search', 'calculator'],    // Only these tools allowed
@@ -160,10 +179,13 @@ const token = await createToken({
 Override client-side SDK options from the token (server-enforced):
 
 ```typescript
+const hmacKey = process.env.HMAC_SECRET;
+const projectId = extractProjectId(hmacKey);
+
 const token = await createToken({
   userId: 'user-123',
-  projectId: 'project-uuid',
-  secret: 'hmac-secret',
+  projectId,
+  secret: hmacKey,
   budget: createBudget({ aiDollars: 1, computeHours: 1, window: 'day' }),
   sdkConfig: {
     model: 'claude-sonnet-4-5-20250929',
@@ -267,7 +289,7 @@ Here's a complete example of a token endpoint:
 
 ```typescript
 // pages/api/token.ts (Next.js example)
-import { createToken, createBudget } from '@chucky.cloud/sdk';
+import { createToken, createBudget, extractProjectId } from '@chucky.cloud/sdk';
 
 export async function POST(req: Request) {
   // Verify user is authenticated (your auth system)
@@ -286,10 +308,14 @@ export async function POST(req: Request) {
 
   const { ai, compute } = budgets[tier];
 
+  // Extract projectId from HMAC key (hk_live_... → UUID)
+  const hmacKey = process.env.CHUCKY_HMAC_SECRET;
+  const projectId = extractProjectId(hmacKey);
+
   const token = await createToken({
     userId: user.id,
-    projectId: process.env.CHUCKY_PROJECT_ID,
-    secret: process.env.CHUCKY_HMAC_SECRET,
+    projectId,
+    secret: hmacKey,
     expiresIn: 3600,
     budget: createBudget({
       aiDollars: ai,
