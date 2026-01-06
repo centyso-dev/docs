@@ -61,18 +61,26 @@
             ]
           }
         ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "WebSocket API",
+            "pages": [
+              "api/websocket",
+              "api/messages",
+              "api/events"
+            ]
+          }
+        ]
       }
     ],
     "global": {
       "anchors": [
         {
-          "anchor": "GitHub",
-          "href": "https://github.com/chucky-cloud",
-          "icon": "github"
-        },
-        {
-          "anchor": "Portal",
-          "href": "https://portal.chucky.cloud",
+          "anchor": "Dashboard",
+          "href": "https://app.chucky.cloud",
           "icon": "grid-2"
         }
       ]
@@ -92,12 +100,11 @@
     "primary": {
       "type": "button",
       "label": "Get Started",
-      "href": "https://portal.chucky.cloud"
+      "href": "https://app.chucky.cloud"
     }
   },
   "footer": {
     "socials": {
-      "github": "https://github.com/chucky-cloud",
       "x": "https://x.com/chucky_cloud"
     }
   }

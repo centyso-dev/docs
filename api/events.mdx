@@ -1,0 +1,321 @@
+---
+title: Streaming Events
+description: Real-time streaming event reference
+---
+
+# Streaming Events
+
+When Claude responds, content is streamed in real-time via `sdk_message` events. This page documents all streaming event types.
+
+## Event Flow
+
+```
+Client sends message
+         ↓
+    ┌────────────────────────────────────┐
+    │         Streaming Response         │
+    ├────────────────────────────────────┤
+    │  sdk_message (text chunk)          │
+    │  sdk_message (text chunk)          │
+    │  sdk_message (tool_use)            │ ← Tool invocation
+    │         ↓                          │
+    │  tool_call (to client)             │ ← Execute tool
+    │  tool_result (from client)         │ ← Return result
+    │         ↓                          │
+    │  sdk_message (text chunk)          │
+    │  sdk_message (text chunk)          │
+    └────────────────────────────────────┘
+         ↓
+    result (final)
+```
+
+## Text Events
+
+Text content streamed as it's generated:
+
+```json
+{
+  "type": "sdk_message",
+  "payload": {
+    "type": "assistant",
+    "subtype": "text",
+    "text": "The capital of France is "
+  }
+}
+```
+
+```json
+{
+  "type": "sdk_message",
+  "payload": {
+    "type": "assistant",
+    "subtype": "text",
+    "text": "Paris."
+  }
+}
+```
+
+Concatenate `text` fields to build the full response.
+
+## Thinking Events
+
+Extended thinking content (when enabled):
+
+```json
+{
+  "type": "sdk_message",
+  "payload": {
+    "type": "assistant",
+    "subtype": "thinking",
+    "thinking": "Let me consider the question..."
+  }
+}
+```
+
+Thinking events show Claude's reasoning process. They're separate from the main response.
+
+## Tool Use Events
+
+When Claude decides to use a tool:
+
+```json
+{
+  "type": "sdk_message",
+  "payload": {
+    "type": "assistant",
+    "subtype": "tool_use",
+    "id": "call_abc123",
+    "name": "get_weather",
+    "input": {
+      "city": "Paris",
+      "unit": "celsius"
+    }
+  }
+}
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `id` | `string` | Unique call identifier |
+| `name` | `string` | Tool name |
+| `input` | `object` | Arguments for the tool |
+
+## Tool Call Request
+
+After a tool use event, the server sends a `tool_call` requesting execution:
+
+```json
+{
+  "type": "tool_call",
+  "payload": {
+    "id": "call_abc123",
+    "name": "get_weather",
+    "input": {
+      "city": "Paris",
+      "unit": "celsius"
+    }
+  }
+}
+```
+
+The client must execute the tool and respond with `tool_result`.
+
+## Tool Result Response
+
+Client sends tool execution result:
+
+```json
+{
+  "type": "tool_result",
+  "payload": {
+    "callId": "call_abc123",
+    "result": {
+      "content": [
+        {
+          "type": "text",
+          "text": "Paris: 18°C, partly cloudy"
+        }
+      ],
+      "isError": false
+    }
+  }
+}
+```
+
+### Success Result
+
+```json
+{
+  "content": [
+    { "type": "text", "text": "Operation successful" }
+  ]
+}
+```
+
+### Error Result
+
+```json
+{
+  "content": [
+    { "type": "text", "text": "File not found" }
+  ],
+  "isError": true
+}
+```
+
+### Image Result
+
+```json
+{
+  "content": [
+    {
+      "type": "image",
+      "data": "base64-encoded-data",
+      "mimeType": "image/png"
+    }
+  ]
+}
+```
+
+## Result Event
+
+Final result after streaming completes:
+
+```json
+{
+  "type": "result",
+  "payload": {
+    "type": "result",
+    "subtype": "success",
+    "text": "The capital of France is Paris. The current weather there is 18°C and partly cloudy.",
+    "total_cost_usd": 0.0025,
+    "duration_secs": 2.3,
+    "turn_count": 1,
+    "session_id": "session_abc123",
+    "usage": {
+      "input_tokens": 150,
+      "output_tokens": 45,
+      "cache_read_input_tokens": 0
+    }
+  }
+}
+```
+
+### Result Subtypes
+
+| Subtype | Description |
+|---------|-------------|
+| `success` | Completed successfully |
+| `error` | Error occurred |
+| `interrupted` | Interrupted (e.g., max turns reached) |
+
+### Usage Fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `input_tokens` | `number` | Input tokens used |
+| `output_tokens` | `number` | Output tokens generated |
+| `cache_creation_input_tokens` | `number` | Tokens used to create cache |
+| `cache_read_input_tokens` | `number` | Tokens read from cache |
+
+## Error Events
+
+Errors during streaming:
+
+```json
+{
+  "type": "error",
+  "payload": {
+    "code": "TOOL_EXECUTION_ERROR",
+    "message": "Tool 'get_weather' failed to execute",
+    "details": {
+      "toolName": "get_weather",
+      "originalError": "Network timeout"
+    }
+  }
+}
+```
+
+## Event Handling Example
+
+```javascript
+ws.onmessage = (event) => {
+  const message = JSON.parse(event.data);
+
+  switch (message.type) {
+    case 'sdk_message':
+      const payload = message.payload;
+
+      if (payload.subtype === 'text') {
+        // Append text to response
+        responseText += payload.text;
+        updateDisplay(responseText);
+      } else if (payload.subtype === 'thinking') {
+        // Show thinking indicator
+        showThinking(payload.thinking);
+      } else if (payload.subtype === 'tool_use') {
+        // Tool will be called
+        showToolIndicator(payload.name);
+      }
+      break;
+
+    case 'tool_call':
+      // Execute tool and send result
+      const result = await executeLocalTool(
+        message.payload.name,
+        message.payload.input
+      );
+      ws.send(JSON.stringify({
+        type: 'tool_result',
+        payload: {
+          callId: message.payload.id,
+          result: result
+        }
+      }));
+      break;
+
+    case 'result':
+      // Streaming complete
+      const finalResult = message.payload;
+      console.log('Final text:', finalResult.text);
+      console.log('Cost:', finalResult.total_cost_usd);
+      console.log('Duration:', finalResult.duration_secs);
+      break;
+
+    case 'error':
+      // Handle error
+      console.error('Error:', message.payload.code, message.payload.message);
+      break;
+  }
+};
+```
+
+## Multiple Tool Calls
+
+Claude may call multiple tools in sequence:
+
+```
+sdk_message (tool_use: search)
+tool_call: search
+tool_result: search results
+sdk_message (tool_use: summarize)
+tool_call: summarize
+tool_result: summary
+sdk_message (text)
+result
+```
+
+Or in parallel (same response turn):
+
+```
+sdk_message (tool_use: weather_paris)
+sdk_message (tool_use: weather_london)
+tool_call: weather_paris
+tool_call: weather_london
+tool_result: weather_paris
+tool_result: weather_london
+sdk_message (text)
+result
+```
+
+Handle both patterns in your client.

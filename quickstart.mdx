@@ -9,7 +9,7 @@ This guide will help you integrate Claude into your application using the Chucky
 
 ## Prerequisites
 
-- A Chucky account with a project created at [portal.chucky.cloud](https://portal.chucky.cloud)
+- A Chucky account with a project created at [app.chucky.cloud](https://app.chucky.cloud)
 - Your project's **HMAC secret** (found in project settings)
 - Node.js 18+ or Python 3.10+
 
@@ -48,7 +48,7 @@ import { createToken, createBudget } from '@chucky.cloud/sdk';
 // Create a token for a user
 const token = await createToken({
   userId: 'user-123',              // Your user's ID
-  projectId: 'your-project-uuid',  // From portal.chucky.cloud
+  projectId: 'your-project-uuid',  // From app.chucky.cloud
   secret: process.env.HMAC_SECRET, // Your HMAC secret
   expiresIn: 3600,                 // 1 hour
   budget: createBudget({

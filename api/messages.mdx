@@ -1,0 +1,294 @@
+---
+title: Message Types
+description: WebSocket message type reference
+---
+
+# Message Types
+
+Complete reference for all WebSocket message types.
+
+## Outgoing Messages (Client → Server)
+
+### init
+
+Initialize a session with configuration options.
+
+```json
+{
+  "type": "init",
+  "payload": {
+    "model": "claude-sonnet-4-5-20250929",
+    "systemPrompt": "You are a helpful assistant.",
+    "maxTurns": 10,
+    "tools": [],
+    "mcpServers": []
+  }
+}
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `model` | `string` | No | Claude model (default: from token) |
+| `systemPrompt` | `string` | No | System prompt |
+| `maxTurns` | `number` | No | Max conversation turns |
+| `tools` | `array` | No | Tool definitions |
+| `mcpServers` | `array` | No | MCP server definitions |
+| `allowedTools` | `string[]` | No | Tool whitelist |
+| `disallowedTools` | `string[]` | No | Tool blacklist |
+| `maxBudgetUsd` | `number` | No | Session budget limit |
+
+---
+
+### prompt
+
+Send a one-shot prompt (stateless mode).
+
+```json
+{
+  "type": "prompt",
+  "payload": {
+    "message": "What is 2 + 2?",
+    "model": "claude-sonnet-4-5-20250929"
+  }
+}
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `message` | `string` | Yes | The prompt message |
+| `model` | `string` | No | Override model |
+| `systemPrompt` | `string` | No | System prompt |
+| `tools` | `array` | No | Tool definitions |
+| `outputFormat` | `object` | No | Structured output format |
+
+---
+
+### sdk_message
+
+Send a message in an active session.
+
+```json
+{
+  "type": "sdk_message",
+  "payload": {
+    "type": "user",
+    "message": "Hello, Claude!"
+  }
+}
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `type` | `string` | Yes | Message type (`user`) |
+| `message` | `string` | Yes | User message content |
+
+---
+
+### tool_result
+
+Return a tool execution result.
+
+```json
+{
+  "type": "tool_result",
+  "payload": {
+    "callId": "call_abc123",
+    "result": {
+      "content": [
+        { "type": "text", "text": "Result data" }
+      ],
+      "isError": false
+    }
+  }
+}
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `callId` | `string` | Yes | Tool call ID from `tool_call` |
+| `result` | `object` | Yes | Tool result |
+| `result.content` | `array` | Yes | Content blocks |
+| `result.isError` | `boolean` | No | Whether result is an error |
+
+---
+
+### control
+
+Send control commands.
+
+```json
+{
+  "type": "control",
+  "payload": {
+    "action": "close"
+  }
+}
+```
+
+| Action | Description |
+|--------|-------------|
+| `close` | Gracefully close the session |
+
+---
+
+### ping
+
+Keep-alive ping.
+
+```json
+{
+  "type": "ping",
+  "payload": {
+    "timestamp": 1704067200000
+  }
+}
+```
+
+## Incoming Messages (Server → Client)
+
+### control
+
+Server control messages.
+
+```json
+{
+  "type": "control",
+  "payload": {
+    "action": "ready",
+    "data": {
+      "sessionId": "session_abc123"
+    }
+  }
+}
+```
+
+| Action | Description |
+|--------|-------------|
+| `ready` | Session initialized and ready |
+| `session_info` | Session metadata |
+
+---
+
+### sdk_message
+
+Streaming response content.
+
+```json
+{
+  "type": "sdk_message",
+  "payload": {
+    "type": "assistant",
+    "subtype": "text",
+    "text": "Hello! "
+  }
+}
+```
+
+Subtypes:
+
+| Subtype | Description |
+|---------|-------------|
+| `text` | Text content chunk |
+| `thinking` | Extended thinking content |
+| `tool_use` | Tool invocation |
+
+---
+
+### tool_call
+
+Request tool execution from client.
+
+```json
+{
+  "type": "tool_call",
+  "payload": {
+    "id": "call_abc123",
+    "name": "get_weather",
+    "input": {
+      "city": "Paris"
+    }
+  }
+}
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `id` | `string` | Unique call ID |
+| `name` | `string` | Tool name |
+| `input` | `object` | Tool input arguments |
+
+---
+
+### result
+
+Final response result.
+
+```json
+{
+  "type": "result",
+  "payload": {
+    "type": "result",
+    "subtype": "success",
+    "text": "The answer is 4.",
+    "total_cost_usd": 0.0012,
+    "duration_secs": 1.5,
+    "session_id": "session_abc123",
+    "usage": {
+      "input_tokens": 50,
+      "output_tokens": 20
+    }
+  }
+}
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `type` | `string` | Always `"result"` |
+| `subtype` | `string` | `success`, `error`, or `interrupted` |
+| `text` | `string` | Final response text |
+| `total_cost_usd` | `number` | Total cost in USD |
+| `duration_secs` | `number` | Response time |
+| `session_id` | `string` | Session ID for resumption |
+| `usage` | `object` | Token usage details |
+
+---
+
+### error
+
+Error message.
+
+```json
+{
+  "type": "error",
+  "payload": {
+    "code": "BUDGET_EXCEEDED",
+    "message": "AI budget exceeded for this period",
+    "details": {
+      "budgetType": "ai",
+      "used": 1000000,
+      "limit": 1000000
+    }
+  }
+}
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `code` | `string` | Error code |
+| `message` | `string` | Human-readable message |
+| `details` | `object` | Additional context |
+
+---
+
+### pong
+
+Response to ping.
+
+```json
+{
+  "type": "pong",
+  "payload": {
+    "timestamp": 1704067200000
+  }
+}
+```

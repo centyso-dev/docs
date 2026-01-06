@@ -1,0 +1,229 @@
+---
+title: WebSocket API
+description: Low-level WebSocket API for Chucky
+---
+
+# WebSocket API
+
+The Chucky service uses WebSocket for real-time bidirectional communication. This document describes the low-level protocol for developers who want to build custom clients.
+
+<Note>
+  Most users should use the [JavaScript SDK](/sdk/javascript/client) or [Python SDK](/sdk/python/client) instead of the raw WebSocket API.
+</Note>
+
+## Connection
+
+### Endpoint
+
+```
+wss://conjure.chucky.cloud/ws?token=<JWT>
+```
+
+### Authentication
+
+Include your JWT token as a query parameter:
+
+```javascript
+const ws = new WebSocket(`wss://conjure.chucky.cloud/ws?token=${token}`);
+```
+
+The token must be a valid JWT signed with your project's HMAC secret. See [Authentication](/authentication) for token creation.
+
+## Message Format
+
+All messages are JSON-encoded with an envelope structure:
+
+```typescript
+interface Envelope {
+  type: string;
+  payload: unknown;
+}
+```
+
+### Example
+
+```json
+{
+  "type": "sdk_message",
+  "payload": {
+    "type": "user",
+    "message": "Hello, Claude!"
+  }
+}
+```
+
+## Connection Lifecycle
+
+```
+Client                              Server
+   |                                   |
+   |──────── WebSocket Connect ───────>|
+   |                                   |
+   |<──────── Connection Accepted ─────|
+   |                                   |
+   |──────── init message ────────────>|
+   |                                   |
+   |<──────── control:ready ───────────|
+   |                                   |
+   |──────── sdk_message ─────────────>|
+   |<──────── sdk_message (stream) ────|
+   |<──────── sdk_message (stream) ────|
+   |<──────── result ──────────────────|
+   |                                   |
+   |──────── control:close ───────────>|
+   |                                   |
+   └───────────────────────────────────┘
+```
+
+## Initialization
+
+After connecting, send an `init` message to configure the session:
+
+```json
+{
+  "type": "init",
+  "payload": {
+    "model": "claude-sonnet-4-5-20250929",
+    "systemPrompt": "You are a helpful assistant.",
+    "maxTurns": 10
+  }
+}
+```
+
+### Init Payload Options
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `model` | `string` | Claude model to use |
+| `systemPrompt` | `string` | System prompt |
+| `maxTurns` | `number` | Maximum conversation turns |
+| `tools` | `array` | Tool definitions |
+| `mcpServers` | `array` | MCP server definitions |
+| `allowedTools` | `string[]` | Whitelist of tools |
+| `disallowedTools` | `string[]` | Blacklist of tools |
+
+## Keep-Alive
+
+Send periodic ping messages to keep the connection alive:
+
+```json
+{
+  "type": "ping",
+  "payload": {
+    "timestamp": 1704067200000
+  }
+}
+```
+
+Server responds with:
+
+```json
+{
+  "type": "pong",
+  "payload": {
+    "timestamp": 1704067200000
+  }
+}
+```
+
+Recommended interval: 30-60 seconds.
+
+## Closing
+
+To gracefully close a session:
+
+```json
+{
+  "type": "control",
+  "payload": {
+    "action": "close"
+  }
+}
+```
+
+## Error Handling
+
+Errors are sent as:
+
+```json
+{
+  "type": "error",
+  "payload": {
+    "code": "BUDGET_EXCEEDED",
+    "message": "AI budget exceeded",
+    "details": {
+      "used": 1000000,
+      "limit": 1000000
+    }
+  }
+}
+```
+
+### Error Codes
+
+| Code | Description |
+|------|-------------|
+| `AUTHENTICATION_ERROR` | Invalid or expired token |
+| `BUDGET_EXCEEDED` | AI or compute budget exceeded |
+| `CONCURRENCY_LIMIT` | Too many concurrent sessions |
+| `RATE_LIMIT` | Rate limit exceeded |
+| `SESSION_ERROR` | Session operation failed |
+| `VALIDATION_ERROR` | Invalid message format |
+
+## Example: Minimal Client
+
+```javascript
+const token = 'your-jwt-token';
+const ws = new WebSocket(`wss://conjure.chucky.cloud/ws?token=${token}`);
+
+ws.onopen = () => {
+  // Initialize session
+  ws.send(JSON.stringify({
+    type: 'init',
+    payload: {
+      model: 'claude-sonnet-4-5-20250929',
+    }
+  }));
+};
+
+ws.onmessage = (event) => {
+  const message = JSON.parse(event.data);
+
+  switch (message.type) {
+    case 'control':
+      if (message.payload.action === 'ready') {
+        // Session ready, send a message
+        ws.send(JSON.stringify({
+          type: 'sdk_message',
+          payload: {
+            type: 'user',
+            message: 'Hello!'
+          }
+        }));
+      }
+      break;
+
+    case 'sdk_message':
+      // Handle streaming response
+      console.log('Stream:', message.payload);
+      break;
+
+    case 'result':
+      // Final result
+      console.log('Result:', message.payload.text);
+      break;
+
+    case 'error':
+      console.error('Error:', message.payload);
+      break;
+  }
+};
+
+ws.onerror = (error) => {
+  console.error('WebSocket error:', error);
+};
+
+ws.onclose = (event) => {
+  console.log('Connection closed:', event.code, event.reason);
+};
+```
