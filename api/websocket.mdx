@@ -54,26 +54,26 @@ interface Envelope {
 
 ## Connection Lifecycle
 
-```
-Client                              Server
-   |                                   |
-   |──────── WebSocket Connect ───────>|
-   |                                   |
-   |<──────── Connection Accepted ─────|
-   |                                   |
-   |──────── init message ────────────>|
-   |                                   |
-   |<──────── control:ready ───────────|
-   |                                   |
-   |──────── sdk_message ─────────────>|
-   |<──────── sdk_message (stream) ────|
-   |<──────── sdk_message (stream) ────|
-   |<──────── result ──────────────────|
-   |                                   |
-   |──────── control:close ───────────>|
-   |                                   |
-   └───────────────────────────────────┘
-```
+<Steps>
+  <Step title="Connect">
+    Client opens WebSocket connection to `wss://conjure.chucky.cloud/ws?token=<JWT>`
+  </Step>
+  <Step title="Initialize">
+    Client sends `init` message with session configuration
+  </Step>
+  <Step title="Ready">
+    Server responds with `control:ready` when session is initialized
+  </Step>
+  <Step title="Communicate">
+    Client sends `sdk_message`, server streams response chunks back
+  </Step>
+  <Step title="Result">
+    Server sends `result` message when response is complete
+  </Step>
+  <Step title="Close">
+    Client sends `control:close` to end session gracefully
+  </Step>
+</Steps>
 
 ## Initialization
 

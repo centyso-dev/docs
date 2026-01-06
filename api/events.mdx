@@ -9,25 +9,17 @@ When Claude responds, content is streamed in real-time via `sdk_message` events.
 
 ## Event Flow
 
-```
-Client sends message
-         ↓
-    ┌────────────────────────────────────┐
-    │         Streaming Response         │
-    ├────────────────────────────────────┤
-    │  sdk_message (text chunk)          │
-    │  sdk_message (text chunk)          │
-    │  sdk_message (tool_use)            │ ← Tool invocation
-    │         ↓                          │
-    │  tool_call (to client)             │ ← Execute tool
-    │  tool_result (from client)         │ ← Return result
-    │         ↓                          │
-    │  sdk_message (text chunk)          │
-    │  sdk_message (text chunk)          │
-    └────────────────────────────────────┘
-         ↓
-    result (final)
-```
+<Steps>
+  <Step title="Client sends message">
+    User message sent via `sdk_message`
+  </Step>
+  <Step title="Streaming Response">
+    Server streams `sdk_message` events with text chunks. If Claude invokes a tool, a `tool_use` event is sent, followed by `tool_call` for execution. Client responds with `tool_result`, then streaming continues.
+  </Step>
+  <Step title="Result">
+    Server sends final `result` event with complete response and usage stats
+  </Step>
+</Steps>
 
 ## Text Events
 

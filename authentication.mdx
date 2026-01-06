@@ -9,20 +9,20 @@ Chucky uses JWT (JSON Web Tokens) for authentication. Tokens are created server-
 
 ## Token Architecture
 
-```
-┌─────────────────┐      1. Request token      ┌─────────────────┐
-│   Your Client   │ ───────────────────────────► │   Your Server   │
-│   (Browser)     │                              │   (Backend)     │
-└────────┬────────┘                              └────────┬────────┘
-         │                                                │
-         │   4. Use SDK with token                        │ 2. Create JWT
-         │                                                │    with HMAC secret
-         ▼                                                ▼
-┌─────────────────┐      3. Return token        ┌─────────────────┐
-│  Chucky Cloud   │ ◄──────────────────────────── │   JWT Token     │
-│                 │                              │   (signed)      │
-└─────────────────┘                              └─────────────────┘
-```
+<Steps>
+  <Step title="Request Token">
+    Your client (browser) requests a token from your backend server
+  </Step>
+  <Step title="Create JWT">
+    Your server creates a JWT signed with your HMAC secret, including user ID and budget limits
+  </Step>
+  <Step title="Return Token">
+    Server returns the signed JWT to the client
+  </Step>
+  <Step title="Use SDK">
+    Client uses the token to connect to Chucky Cloud via the SDK
+  </Step>
+</Steps>
 
 <Warning>
   **Never expose your HMAC secret** to clients. Always create tokens on your server.

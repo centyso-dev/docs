@@ -19,18 +19,17 @@ Chucky is a platform that lets you integrate Claude into your applications with:
 
 ## Architecture
 
-```
-┌─────────────────┐     WebSocket      ┌──────────────────┐
-│   Your App      │ ◄─────────────────► │  Chucky Cloud    │
-│ (Browser/Node)  │                     │  (Edge Network)  │
-└─────────────────┘                     └────────┬─────────┘
-                                                 │
-                                                 ▼
-                                        ┌──────────────────┐
-                                        │   Claude API     │
-                                        │   (Anthropic)    │
-                                        └──────────────────┘
-```
+<Steps>
+  <Step title="Your App">
+    Your application (browser or Node.js) connects via WebSocket
+  </Step>
+  <Step title="Chucky Cloud">
+    Edge network handles authentication, budgets, and session management
+  </Step>
+  <Step title="Claude API">
+    Requests are forwarded to Anthropic's Claude API
+  </Step>
+</Steps>
 
 ## Key Features
 

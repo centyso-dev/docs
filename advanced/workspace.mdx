@@ -19,20 +19,17 @@ Workspaces let you pre-configure the sandbox environment with files, dependencie
 3. Claude has access to all files in the workspace
 4. Tools can read/write files in the workspace
 
-```
-┌─────────────────┐     Upload        ┌──────────────────┐
-│  Your Files     │ ────────────────► │  Chucky Portal   │
-│  workspace.tgz  │                   │  (R2 Storage)    │
-└─────────────────┘                   └────────┬─────────┘
-                                               │
-                                               ▼ Session start
-                                      ┌──────────────────┐
-                                      │  Sandbox         │
-                                      │  /workspace/     │
-                                      │    project/      │
-                                      │      your files  │
-                                      └──────────────────┘
-```
+<Steps>
+  <Step title="Upload">
+    Upload `workspace.tgz` to your project via the Chucky Portal (stored in R2)
+  </Step>
+  <Step title="Session Start">
+    When a session starts, the workspace is extracted to `/workspace/project`
+  </Step>
+  <Step title="Access">
+    Claude and tools can read/write files in the workspace directory
+  </Step>
+</Steps>
 
 ## Creating a Workspace
 
