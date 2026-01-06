@@ -66,6 +66,12 @@
         "tab": "API Reference",
         "groups": [
           {
+            "group": "REST API",
+            "pages": [
+              "api/rest"
+            ]
+          },
+          {
             "group": "WebSocket API",
             "pages": [
               "api/websocket",
