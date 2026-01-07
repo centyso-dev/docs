@@ -1,0 +1,150 @@
+---
+title: Prompt Command
+description: Send prompts to any Chucky project from the command line
+---
+
+# Prompt Command
+
+The `chucky prompt` command lets you send prompts to any project in your account directly from the terminal. It supports streaming responses, structured output, and custom tools.
+
+## Basic Usage
+
+```bash
+chucky prompt "Your prompt here" --project <project-name>
+```
+
+If you're in a directory with a `.chucky.json` file (created by `chucky init`), the `--project` flag is optional.
+
+## Options
+
+| Option | Description | Default |
+|--------|-------------|---------|
+| `--project <name\|id>` | Project to run against | From `.chucky.json` |
+| `--token <jwt>` | Use a pre-generated JWT token | Auto-generated |
+| `--output-format <format>` | Output format: `text`, `json`, `stream-json` | `text` |
+| `--json-schema <schema>` | JSON Schema for structured output | - |
+| `--model <model>` | Model: `sonnet`, `opus`, `haiku`, or full name | `sonnet` |
+| `--system-prompt <prompt>` | System prompt for the session | - |
+| `--allowed-tools <tools>` | Comma-separated list of allowed tools | - |
+| `--disallowed-tools <tools>` | Comma-separated list of disallowed tools | - |
+| `--permission-mode <mode>` | Permission mode for tools | `default` |
+| `--dangerously-skip-permissions` | Bypass all permission checks | `false` |
+| `--max-turns <n>` | Maximum conversation turns | - |
+| `--allow-possession` | Enable host tools (Claude controls your machine) | `false` |
+
+## Examples
+
+### Simple Prompt
+
+```bash
+chucky prompt "Explain quantum computing in simple terms" --project my-project
+```
+
+### Use a Different Model
+
+```bash
+chucky prompt "Write a detailed analysis" --project my-project --model opus
+```
+
+### Structured JSON Output
+
+```bash
+chucky prompt "List 3 programming languages with their creators" \
+  --project my-project \
+  --json-schema '{"type":"object","properties":{"languages":{"type":"array","items":{"type":"object","properties":{"name":{"type":"string"},"creator":{"type":"string"}}}}}}'
+```
+
+### Custom System Prompt
+
+```bash
+chucky prompt "Review this code" \
+  --project my-project \
+  --system-prompt "You are a senior code reviewer. Be concise and focus on security issues."
+```
+
+### Streaming JSON Output
+
+For programmatic use, get each event as JSON:
+
+```bash
+chucky prompt "Generate a story" --project my-project --output-format stream-json
+```
+
+### Reading from Stdin
+
+Pipe content into the prompt:
+
+```bash
+cat README.md | chucky prompt --project my-project "Summarize this document"
+```
+
+Or use process substitution:
+
+```bash
+chucky prompt "Explain this code:" --project my-project < main.ts
+```
+
+## Output Formats
+
+### Text (Default)
+
+Human-readable streaming output with tool calls highlighted:
+
+```
+- Connecting to my-project...
+Hello! I'll help you with that.
+[Tool] HostBash
+[Result] file1.ts, file2.ts...
+Here are your TypeScript files...
+
+✓ Complete
+```
+
+### JSON
+
+Full result object at the end:
+
+```bash
+chucky prompt "Hello" --project my-project --output-format json
+```
+
+```json
+{
+  "type": "result",
+  "subtype": "success",
+  "result": "Hello! How can I help you?",
+  "total_cost_usd": 0.0012,
+  "num_turns": 1
+}
+```
+
+### Stream JSON
+
+Each message as a separate JSON line (NDJSON):
+
+```bash
+chucky prompt "Hello" --project my-project --output-format stream-json
+```
+
+```json
+{"type":"assistant","message":{...}}
+{"type":"result","subtype":"success",...}
+```
+
+## Using Pre-Generated Tokens
+
+For integration with your backend, you can use a pre-generated JWT token:
+
+```bash
+# Get token from your server
+TOKEN=$(curl -s https://your-api.com/get-token)
+
+# Use it with the CLI
+chucky prompt "Hello" --token "$TOKEN"
+```
+
+## Next Steps
+
+<Card title="Possession Mode" icon="ghost" href="/cli/possession">
+  Learn how to let Claude execute commands on your machine
+</Card>

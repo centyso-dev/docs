@@ -1,0 +1,79 @@
+---
+title: CLI Overview
+description: Command-line interface for interacting with Chucky
+---
+
+# Chucky CLI
+
+The Chucky CLI (`@chucky.cloud/cli`) is a powerful command-line tool for developers to:
+
+- **Deploy workspaces** to Chucky cloud
+- **Run prompts** against any project in your account
+- **Enable Claude to control your machine** with host tools (possession mode)
+
+## Installation
+
+```bash
+npm install -g @chucky.cloud/cli
+```
+
+## Authentication
+
+Before using the CLI, authenticate with your Chucky account:
+
+```bash
+chucky login
+```
+
+You'll be prompted to enter your API key (found in [app.chucky.cloud](https://app.chucky.cloud) under Account Settings).
+
+## Commands
+
+| Command | Description |
+|---------|-------------|
+| `chucky login` | Authenticate with your Chucky account |
+| `chucky list` | List all projects in your account |
+| `chucky init` | Initialize a new project in the current directory |
+| `chucky deploy` | Deploy workspace to Chucky cloud |
+| `chucky keys` | Show HMAC key for current project |
+| `chucky prompt` | Send prompts to any project |
+| `chucky config anthropic` | Set Anthropic API key for a project |
+| `chucky delete` | Delete a project |
+
+## Quick Examples
+
+### List your projects
+
+```bash
+chucky list
+```
+
+### Send a simple prompt
+
+```bash
+chucky prompt "What is 2+2?" --project my-project
+```
+
+### Enable Claude to run commands on your machine
+
+```bash
+chucky prompt "List all TypeScript files and count them" \
+  --project my-project \
+  --allow-possession \
+  --dangerously-skip-permissions
+```
+
+<Note>
+The `--allow-possession` flag is a powerful feature that lets Claude execute commands on your local machine. See [Possession Mode](/cli/possession) for details.
+</Note>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Prompt Command" icon="terminal" href="/cli/prompt">
+    All options for the prompt command
+  </Card>
+  <Card title="Possession Mode" icon="ghost" href="/cli/possession">
+    Let Claude control your machine
+  </Card>
+</CardGroup>

@@ -30,6 +30,14 @@
             ]
           },
           {
+            "group": "CLI",
+            "pages": [
+              "cli/index",
+              "cli/prompt",
+              "cli/possession"
+            ]
+          },
+          {
             "group": "Advanced",
             "pages": [
               "advanced/error-handling",
