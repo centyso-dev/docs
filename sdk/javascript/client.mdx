@@ -32,10 +32,8 @@ const client = new ChuckyClient(options: ClientOptions);
 | `token` | `string` | Yes | - | JWT authentication token |
 | `baseUrl` | `string` | No | `'wss://conjure.chucky.cloud/ws'` | WebSocket server URL |
 | `debug` | `boolean` | No | `false` | Enable debug logging |
-| `timeout` | `number` | No | `30000` | Connection timeout (ms) |
+| `timeout` | `number` | No | `60000` | Connection timeout (ms) |
 | `keepAliveInterval` | `number` | No | `300000` | Keep-alive interval (ms) |
-| `autoReconnect` | `boolean` | No | `true` | Auto-reconnect on disconnect |
-| `maxReconnectAttempts` | `number` | No | `5` | Max reconnect attempts |
 
 ### Example
 
@@ -43,7 +41,6 @@ const client = new ChuckyClient(options: ClientOptions);
 const client = new ChuckyClient({
   token: 'your-jwt-token',
   debug: true,
-  timeout: 60000,
 });
 ```
 

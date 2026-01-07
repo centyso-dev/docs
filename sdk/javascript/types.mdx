@@ -18,8 +18,6 @@ interface ClientOptions {
   debug?: boolean;
   timeout?: number;
   keepAliveInterval?: number;
-  autoReconnect?: boolean;
-  maxReconnectAttempts?: number;
 }
 ```
 
@@ -30,7 +28,6 @@ type ConnectionStatus =
   | 'disconnected'
   | 'connecting'
   | 'connected'
-  | 'reconnecting'
   | 'error';
 ```
 
@@ -40,7 +37,6 @@ type ConnectionStatus =
 interface ClientEventHandlers {
   onConnect?: () => void;
   onDisconnect?: (reason: string) => void;
-  onReconnect?: (attempt: number) => void;
   onError?: (error: Error) => void;
 }
 ```
