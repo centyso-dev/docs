@@ -93,6 +93,16 @@
           "anchor": "Dashboard",
           "href": "https://app.chucky.cloud",
           "icon": "grid-2"
+        },
+        {
+          "anchor": "Discord",
+          "href": "https://discord.gg/e6p2TQYbvz",
+          "icon": "discord"
+        },
+        {
+          "anchor": "LLMs.txt",
+          "href": "https://docs.chucky.cloud/llms.txt",
+          "icon": "robot"
         }
       ]
     }
@@ -116,7 +126,8 @@
   },
   "footer": {
     "socials": {
-      "x": "https://x.com/chucky_cloud"
+      "x": "https://x.com/chucky_cloud",
+      "discord": "https://discord.gg/e6p2TQYbvz"
     }
   }
 }
