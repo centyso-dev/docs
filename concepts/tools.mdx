@@ -1,79 +1,70 @@
 ---
 title: Tools
-description: Give Claude the ability to take actions
+description: Give Claude the ability to take actions in your application
 ---
 
 # Tools
 
-Tools let Claude interact with the outside world - query databases, call APIs, manipulate files, or perform any action your application needs.
+Tools let Claude call functions that execute in your application - query databases, call APIs, interact with UI elements, or perform any action your app needs.
 
-## How Tools Work
+## How It Works
 
-1. You define tools with a name, description, and input schema
-2. Claude decides when to use a tool based on the conversation
-3. The SDK executes the tool handler with Claude's inputs
-4. Claude receives the result and continues the conversation
+When you define a tool with a handler, the handler runs in **your application** (not on the server). Here's the flow:
 
 ```
-User: "What's the weather in Tokyo?"
-         ↓
-Claude: [Decides to call get_weather tool]
-         ↓
-SDK: [Executes get_weather({ city: 'Tokyo' })]
-         ↓
-Tool: [Returns "Sunny, 22°C"]
-         ↓
-Claude: "The weather in Tokyo is sunny with a temperature of 22°C."
+Your App                    Chucky Cloud                    Claude
+   │                             │                            │
+   │  createSession(mcpServers)  │                            │
+   │────────────────────────────►│                            │
+   │                             │                            │
+   │  send("Get weather in Tokyo") │    prompt + tools        │
+   │────────────────────────────►│───────────────────────────►│
+   │                             │                            │
+   │                             │     tool_call: get_weather │
+   │   tool_call: get_weather    │◄───────────────────────────│
+   │◄────────────────────────────│                            │
+   │                             │                            │
+   │   [your handler executes]   │                            │
+   │   → fetchWeatherAPI(tokyo)  │                            │
+   │   → returns "Sunny, 22°C"   │                            │
+   │                             │                            │
+   │   tool_result: "Sunny, 22°C"│     tool_result            │
+   │────────────────────────────►│───────────────────────────►│
+   │                             │                            │
+   │                             │     "It's sunny and 22°C"  │
+   │   assistant message         │◄───────────────────────────│
+   │◄────────────────────────────│                            │
 ```
+
+This means your tools have access to everything in your app: databases, APIs, the DOM (in browser), local storage, etc.
 
 ## Creating Tools
 
-### Using `tool()` Helper
-
-The simplest way to create a tool:
+A tool is an object with four properties:
 
 ```typescript
-import { tool } from '@chucky.cloud/sdk';
-
-const greetTool = tool(
-  'greet',                              // Name
-  'Greet a person by name',             // Description
-  {                                     // Input schema (JSON Schema)
-    type: 'object',
-    properties: {
-      name: { type: 'string', description: 'Person name' },
-      formal: { type: 'boolean', description: 'Use formal greeting' },
-    },
-    required: ['name'],
-  },
-  async ({ name, formal }) => ({        // Handler
-    content: [{
-      type: 'text',
-      text: formal ? `Good day, ${name}.` : `Hey ${name}!`,
-    }],
-  })
-);
+const myTool = {
+  name: 'tool_name',           // Unique identifier
+  description: 'What it does', // Helps Claude decide when to use it
+  inputSchema: { ... },        // JSON Schema for parameters
+  handler: async (input) => {  // Function that runs in YOUR app
+    // ... your code ...
+    return { content: [{ type: 'text', text: 'result' }] };
+  }
+};
 ```
 
-### Using `createTool()`
-
-More explicit tool creation:
+### Example: Weather Tool
 
 ```typescript
-import { createTool } from '@chucky.cloud/sdk';
-
-const weatherTool = createTool({
+const weatherTool = {
   name: 'get_weather',
-  description: 'Get current weather for a location',
+  description: 'Get current weather for a city',
   inputSchema: {
     type: 'object',
     properties: {
       city: { type: 'string', description: 'City name' },
-      unit: {
-        type: 'string',
-        enum: ['celsius', 'fahrenheit'],
-        description: 'Temperature unit',
-      },
+      unit: { type: 'string', enum: ['celsius', 'fahrenheit'] },
     },
     required: ['city'],
   },
@@ -82,89 +73,119 @@ const weatherTool = createTool({
     return {
       content: [{
         type: 'text',
-        text: `${city}: ${weather.temp}°${unit === 'celsius' ? 'C' : 'F'}, ${weather.condition}`,
-      }],
+        text: `${city}: ${weather.temp}°${unit === 'celsius' ? 'C' : 'F'}, ${weather.condition}`
+      }]
     };
-  },
-});
+  }
+};
 ```
 
-### Python Tool Decorator
+## Using Tools
 
-In Python, use the `@tool` decorator:
-
-```python
-from chucky import tool, text_result
-
-@tool('get_weather', 'Get current weather for a location')
-async def get_weather(
-    city: str,
-    unit: Literal['celsius', 'fahrenheit'] = 'celsius',
-) -> ToolResult:
-    """
-    Args:
-        city: City name
-        unit: Temperature unit
-    """
-    weather = await fetch_weather_api(city, unit)
-    return text_result(f'{city}: {weather.temp}°, {weather.condition}')
-```
-
-## Tool Input Schema
-
-Tools use JSON Schema to define their inputs:
+Tools must be wrapped in an MCP server and passed to `createSession`:
 
 ```typescript
-const schema = {
-  type: 'object',
-  properties: {
-    // String with description
-    query: {
-      type: 'string',
-      description: 'Search query',
-    },
-    // Number with constraints
-    limit: {
-      type: 'number',
-      minimum: 1,
-      maximum: 100,
-      default: 10,
-    },
-    // Enum (fixed options)
-    sort: {
-      type: 'string',
-      enum: ['relevance', 'date', 'rating'],
-    },
-    // Array
-    tags: {
-      type: 'array',
-      items: { type: 'string' },
-    },
-    // Nested object
-    options: {
-      type: 'object',
-      properties: {
-        includeImages: { type: 'boolean' },
+import { ChuckyClient, getAssistantText } from '@chucky.cloud/sdk';
+
+const client = new ChuckyClient({ token });
+
+const session = client.createSession({
+  model: 'claude-sonnet-4-5-20250929',
+  mcpServers: [{
+    name: 'my-tools',
+    version: '1.0.0',
+    tools: [weatherTool, searchTool, calculatorTool]
+  }],
+});
+
+await session.send('What is the weather in Paris?');
+
+for await (const msg of session.stream()) {
+  if (msg.type === 'assistant') {
+    console.log(getAssistantText(msg));
+  }
+}
+
+session.close();
+```
+
+## Input Schema
+
+Use JSON Schema to define tool parameters:
+
+```typescript
+const searchTool = {
+  name: 'search_products',
+  description: 'Search for products in the catalog',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      // Required string
+      query: {
+        type: 'string',
+        description: 'Search query',
+      },
+      // Optional number with constraints
+      limit: {
+        type: 'number',
+        description: 'Max results (1-50)',
+        minimum: 1,
+        maximum: 50,
+      },
+      // Enum (fixed options)
+      sort: {
+        type: 'string',
+        enum: ['relevance', 'price', 'rating'],
+        description: 'Sort order',
+      },
+      // Array of strings
+      tags: {
+        type: 'array',
+        items: { type: 'string' },
+        description: 'Filter by tags',
       },
     },
+    required: ['query'],  // Only query is required
   },
-  required: ['query'],
+  handler: async ({ query, limit = 10, sort = 'relevance', tags = [] }) => {
+    const results = await db.products.search({ query, limit, sort, tags });
+    return { content: [{ type: 'text', text: JSON.stringify(results) }] };
+  }
 };
 ```
 
 ## Tool Results
 
-Tools return a `ToolResult` object:
+Handlers return a `ToolResult` object:
 
 ```typescript
-interface ToolResult {
-  content: ContentBlock[];
-  isError?: boolean;
-}
+// Success with text
+return {
+  content: [{ type: 'text', text: 'Operation completed' }]
+};
 
-type ContentBlock =
-  | { type: 'text'; text: string }
-  | { type: 'image'; data: string; mimeType: string };
+// Error
+return {
+  content: [{ type: 'text', text: 'Error: File not found' }],
+  isError: true
+};
+
+// Image (base64)
+return {
+  content: [{
+    type: 'image',
+    data: base64ImageData,
+    mimeType: 'image/png'
+  }]
+};
+
+// Multiple content blocks
+return {
+  content: [
+    { type: 'text', text: 'Here is the chart:' },
+    { type: 'image', data: chartBase64, mimeType: 'image/png' },
+  ]
+};
 ```
 
 ### Result Helpers
@@ -172,126 +193,78 @@ type ContentBlock =
 ```typescript
 import { textResult, errorResult, imageResult } from '@chucky.cloud/sdk';
 
-// Text result
-return textResult('Operation completed successfully');
+return textResult('Success!');
+// → { content: [{ type: 'text', text: 'Success!' }] }
 
-// Error result
-return errorResult('File not found');
+return errorResult('Something went wrong');
+// → { content: [{ type: 'text', text: 'Something went wrong' }], isError: true }
 
-// Image result (base64)
 return imageResult(base64Data, 'image/png');
-
-// Multiple content blocks
-return {
-  content: [
-    { type: 'text', text: 'Here is the chart:' },
-    { type: 'image', data: chartBase64, mimeType: 'image/png' },
-  ],
-};
+// → { content: [{ type: 'image', data: '...', mimeType: 'image/png' }] }
 ```
 
-## Using Tools
+## Browser Tools
 
-### In Sessions
-
-```typescript
-const session = await client.createSession({
-  model: 'claude-sonnet-4-5-20250929',
-  tools: [greetTool, weatherTool, searchTool],
-});
-
-const result = await session.send(
-  'Greet Alice formally, then tell me the weather in Paris'
-);
-```
-
-### In Prompts
+In the browser, tools have access to the DOM and browser APIs:
 
 ```typescript
-const result = await client.prompt({
-  message: 'What is the weather in London?',
-  tools: [weatherTool],
-});
-```
-
-## Tool Execution Location
-
-Tools can execute in different locations:
-
-### Server Tools
-
-Execute on the Chucky server (default). Define schema only, handler runs server-side:
-
-```typescript
-const dbTool = createTool({
-  name: 'query_database',
-  description: 'Query the database',
-  inputSchema: { ... },
-  executeIn: 'server',
-  // No handler - executed server-side
-});
-```
-
-### Browser Tools
-
-Execute in the user's browser:
-
-```typescript
-import { browserTool } from '@chucky.cloud/sdk';
-
-const alertTool = browserTool({
-  name: 'show_alert',
-  description: 'Show an alert dialog',
+const highlightTool = {
+  name: 'highlight_element',
+  description: 'Highlight an element on the page',
   inputSchema: {
     type: 'object',
     properties: {
+      selector: { type: 'string', description: 'CSS selector' },
+      color: { type: 'string', description: 'Highlight color' },
+    },
+    required: ['selector'],
+  },
+  handler: async ({ selector, color = 'yellow' }) => {
+    const element = document.querySelector(selector);
+    if (!element) {
+      return { content: [{ type: 'text', text: 'Element not found' }], isError: true };
+    }
+    element.style.backgroundColor = color;
+    return { content: [{ type: 'text', text: `Highlighted ${selector}` }] };
+  }
+};
+
+const showModalTool = {
+  name: 'show_modal',
+  description: 'Show a modal dialog to the user',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      title: { type: 'string' },
       message: { type: 'string' },
     },
     required: ['message'],
   },
-  handler: async ({ message }) => {
-    alert(message);
-    return textResult('Alert shown');
-  },
-});
+  handler: async ({ title, message }) => {
+    // Your app's modal component
+    await showModal({ title, message });
+    return { content: [{ type: 'text', text: 'Modal shown' }] };
+  }
+};
 ```
 
-Browser tools can:
-- Access the DOM
-- Show UI elements
-- Read local storage
-- Interact with browser APIs
-
-## Tool Best Practices
+## Best Practices
 
 <AccordionGroup>
   <Accordion title="Write clear descriptions">
-    Claude uses descriptions to decide when to use tools. Be specific about what the tool does and when it should be used.
+    Claude uses descriptions to decide when to use tools. Be specific:
 
     ```typescript
     // Good
-    description: 'Search for products by name, category, or price range. Returns up to 10 matching products with prices and availability.'
+    description: 'Search for products by name, category, or price range. Returns up to 10 matching products.'
 
     // Bad
     description: 'Search products'
     ```
   </Accordion>
 
-  <Accordion title="Validate inputs">
-    Always validate inputs in your handler, even though the schema provides basic validation:
-
-    ```typescript
-    handler: async ({ email }) => {
-      if (!isValidEmail(email)) {
-        return errorResult('Invalid email format');
-      }
-      // ...
-    }
-    ```
-  </Accordion>
-
   <Accordion title="Handle errors gracefully">
-    Return informative error messages so Claude can respond appropriately:
+    Return informative errors so Claude can respond appropriately:
 
     ```typescript
     handler: async ({ id }) => {
@@ -309,77 +282,112 @@ Browser tools can:
   </Accordion>
 
   <Accordion title="Keep tools focused">
-    Each tool should do one thing well. Instead of one complex tool, create multiple simple tools:
+    Each tool should do one thing well:
 
     ```typescript
     // Good: Separate tools
-    const searchProducts = tool('search_products', ...);
-    const getProductDetails = tool('get_product', ...);
-    const addToCart = tool('add_to_cart', ...);
+    const searchProducts = { name: 'search_products', ... };
+    const getProductDetails = { name: 'get_product', ... };
+    const addToCart = { name: 'add_to_cart', ... };
 
     // Bad: One mega-tool
-    const productTool = tool('product_operations', ...);
+    const productOperations = { name: 'product_ops', ... };
+    ```
+  </Accordion>
+
+  <Accordion title="Validate inputs">
+    Even with schema validation, validate in your handler:
+
+    ```typescript
+    handler: async ({ email }) => {
+      if (!isValidEmail(email)) {
+        return errorResult('Invalid email format');
+      }
+      // ...
+    }
     ```
   </Accordion>
 </AccordionGroup>
 
-## Example: Calculator Tool
+## Complete Example
 
 ```typescript
-const calculatorTool = tool(
-  'calculate',
-  'Perform mathematical calculations. Supports basic arithmetic, percentages, and common math functions.',
-  {
+import { createToken, createBudget, ChuckyClient, getAssistantText } from '@chucky.cloud/sdk';
+
+// Define tools
+const getCurrentTime = {
+  name: 'get_current_time',
+  description: 'Get the current date and time',
+  inputSchema: { type: 'object', properties: {} },
+  handler: async () => ({
+    content: [{ type: 'text', text: new Date().toISOString() }]
+  })
+};
+
+const searchUsers = {
+  name: 'search_users',
+  description: 'Search for users in the database',
+  inputSchema: {
     type: 'object',
     properties: {
-      expression: {
-        type: 'string',
-        description: 'Mathematical expression to evaluate (e.g., "2 + 2", "sqrt(16)", "15% of 200")',
-      },
-    },
-    required: ['expression'],
-  },
-  async ({ expression }) => {
-    try {
-      // Safe expression evaluation (use a proper math library in production)
-      const result = evaluateMathExpression(expression);
-      return textResult(`${expression} = ${result}`);
-    } catch (err) {
-      return errorResult(`Could not evaluate: ${expression}`);
-    }
-  }
-);
-
-// Usage
-const result = await client.prompt({
-  message: 'What is 15% of 230, plus the square root of 144?',
-  tools: [calculatorTool],
-});
-// Claude will call calculate twice and combine the results
-```
-
-## Example: Web Search Tool
-
-```typescript
-const searchTool = tool(
-  'web_search',
-  'Search the web for current information. Use for recent events, facts, or topics that may have changed.',
-  {
-    type: 'object',
-    properties: {
-      query: { type: 'string', description: 'Search query' },
-      limit: { type: 'number', description: 'Max results (1-10)', default: 5 },
+      query: { type: 'string', description: 'Name or email to search' },
+      limit: { type: 'number', description: 'Max results' },
     },
     required: ['query'],
   },
-  async ({ query, limit = 5 }) => {
-    const results = await searchAPI.search(query, { limit });
-
-    const formatted = results.map((r, i) =>
-      `${i + 1}. ${r.title}\n   ${r.url}\n   ${r.snippet}`
-    ).join('\n\n');
-
-    return textResult(`Search results for "${query}":\n\n${formatted}`);
+  handler: async ({ query, limit = 10 }) => {
+    const users = await db.users.search(query, { limit });
+    return { content: [{ type: 'text', text: JSON.stringify(users, null, 2) }] };
   }
-);
+};
+
+const sendNotification = {
+  name: 'send_notification',
+  description: 'Send a notification to a user',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      userId: { type: 'string' },
+      message: { type: 'string' },
+    },
+    required: ['userId', 'message'],
+  },
+  handler: async ({ userId, message }) => {
+    await notificationService.send(userId, message);
+    return { content: [{ type: 'text', text: `Notification sent to ${userId}` }] };
+  }
+};
+
+// Create session with tools
+const token = await createToken({
+  userId: 'admin',
+  projectId: process.env.PROJECT_ID,
+  secret: process.env.HMAC_SECRET,
+  budget: createBudget({ aiDollars: 5, computeHours: 1, window: 'day' }),
+});
+
+const client = new ChuckyClient({ token });
+const session = client.createSession({
+  model: 'claude-sonnet-4-5-20250929',
+  systemPrompt: 'You are a helpful admin assistant.',
+  mcpServers: [{
+    name: 'admin-tools',
+    version: '1.0.0',
+    tools: [getCurrentTime, searchUsers, sendNotification]
+  }],
+});
+
+// Claude can now use these tools
+await session.send('Find all users named John and send them a welcome message');
+
+for await (const msg of session.stream()) {
+  if (msg.type === 'assistant') {
+    console.log(getAssistantText(msg));
+  }
+  if (msg.type === 'result') {
+    console.log('Cost:', msg.total_cost_usd);
+  }
+}
+
+session.close();
 ```
