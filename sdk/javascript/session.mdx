@@ -5,14 +5,18 @@ description: JavaScript/TypeScript Session class reference
 
 # Session
 
-The Session class manages multi-turn conversations with Claude.
+The Session class manages multi-turn conversations with Claude. It matches the official Claude Agent SDK V2 interface.
 
 ## Creating Sessions
 
-Sessions are created via the client:
+Sessions are created via the client. Connection happens automatically on first `send()`.
 
 ```typescript
-const session = await client.createSession({
+import { ChuckyClient, getAssistantText } from '@chucky.cloud/sdk';
+
+const client = new ChuckyClient({ token });
+
+const session = client.createSession({
   model: 'claude-sonnet-4-5-20250929',
   systemPrompt: 'You are a helpful assistant.',
 });
@@ -22,42 +26,67 @@ const session = await client.createSession({
 
 ### send()
 
-Send a message and wait for the complete response.
+Send a message to Claude. Returns a Promise that resolves when the message is sent.
+Use `stream()` to receive the response.
 
 ```typescript
-async send(message: string): Promise<SessionResult>
+async send(message: string): Promise<void>
 ```
 
 #### Example
 
 ```typescript
-const result = await session.send('What is the capital of France?');
-console.log(result.text); // "The capital of France is Paris."
+await session.send('What is the capital of France?');
+
+for await (const msg of session.stream()) {
+  if (msg.type === 'assistant') {
+    console.log(getAssistantText(msg));
+  }
+  if (msg.type === 'result') {
+    console.log('Done:', msg.result);
+  }
+}
 ```
 
 ---
 
-### sendStream()
+### stream()
 
-Send a message with streaming response.
+Stream the response after sending a message. Returns an async generator that yields SDK messages.
 
 ```typescript
-async *sendStream(message: string): AsyncGenerator<StreamingEvent>
+async *stream(): AsyncGenerator<SDKMessage, void, unknown>
 ```
+
+#### SDKMessage Types
+
+| Type | Description |
+|------|-------------|
+| `system` | System initialization message with session info |
+| `assistant` | Claude's response with content blocks |
+| `result` | Final result with cost and usage info |
+| `stream_event` | Partial streaming events |
 
 #### Example
 
 ```typescript
-for await (const event of session.sendStream('Tell me a story')) {
-  switch (event.type) {
-    case 'text':
-      process.stdout.write(event.text);
+await session.send('Tell me a story');
+
+for await (const msg of session.stream()) {
+  switch (msg.type) {
+    case 'system':
+      console.log('Session:', msg.session_id);
+      console.log('Model:', msg.model);
       break;
-    case 'tool_use':
-      console.log(`Tool: ${event.name}`);
+    case 'assistant':
+      const text = getAssistantText(msg);
+      if (text) process.stdout.write(text);
       break;
-    case 'thinking':
-      console.log(`[Thinking: ${event.thinking}]`);
+    case 'result':
+      if (msg.subtype === 'success') {
+        console.log('\n\nFinal:', msg.result);
+        console.log('Cost:', msg.total_cost_usd);
+      }
       break;
   }
 }
@@ -65,22 +94,12 @@ for await (const event of session.sendStream('Tell me a story')) {
 
 ---
 
-### prompt()
+### receive()
 
-Alias for `send()`.
-
-```typescript
-async prompt(message: string): Promise<SessionResult>
-```
-
----
-
-### connect()
-
-Manually connect the session (usually automatic).
+Alias for `stream()` for V2 compatibility.
 
 ```typescript
-async connect(): Promise<void>
+receive(): AsyncGenerator<SDKMessage, void, unknown>
 ```
 
 ---
@@ -90,7 +109,7 @@ async connect(): Promise<void>
 Close the session and release resources.
 
 ```typescript
-async close(): Promise<void>
+close(): void
 ```
 
 #### Example
@@ -98,20 +117,12 @@ async close(): Promise<void>
 ```typescript
 try {
   await session.send('Hello');
-  await session.send('Goodbye');
+  for await (const msg of session.stream()) {
+    // handle messages
+  }
 } finally {
-  await session.close();
+  session.close();
 }
-```
-
----
-
-### getResult()
-
-Get the last result from the session.
-
-```typescript
-getResult(): SessionResult | null
 ```
 
 ---
@@ -129,12 +140,6 @@ on(handlers: SessionEventHandlers): this
 | Handler | Parameters | Description |
 |---------|------------|-------------|
 | `onSessionInfo` | `(info: SessionInfo)` | Session initialized |
-| `onMessage` | `(message: Message)` | Message received |
-| `onText` | `(text: string)` | Streaming text |
-| `onToolUse` | `(tool: ToolCall)` | Tool invoked |
-| `onToolResult` | `(callId, result)` | Tool result |
-| `onThinking` | `(thinking: string)` | Extended thinking |
-| `onComplete` | `(result: SessionResult)` | Response complete |
 | `onError` | `(error: Error)` | Error occurred |
 
 #### Example
@@ -143,15 +148,7 @@ on(handlers: SessionEventHandlers): this
 session.on({
   onSessionInfo: (info) => {
     console.log('Session started:', info.sessionId);
-  },
-  onText: (text) => {
-    updateDisplay(text);
-  },
-  onToolUse: (tool) => {
-    showToolIndicator(tool.name);
-  },
-  onComplete: (result) => {
-    console.log('Cost:', result.total_cost_usd);
+    console.log('Model:', info.model);
   },
   onError: (error) => {
     showError(error.message);
@@ -180,14 +177,6 @@ type SessionState =
   | 'error';         // Error state
 ```
 
-#### Example
-
-```typescript
-if (session.state === 'ready') {
-  await session.send('Hello');
-}
-```
-
 ---
 
 ### sessionId
@@ -195,61 +184,98 @@ if (session.state === 'ready') {
 The session's unique identifier.
 
 ```typescript
-get sessionId(): string | null
+get sessionId(): string
+```
+
+## Helper Functions
+
+### getAssistantText()
+
+Extract text content from an assistant message.
+
+```typescript
+import { getAssistantText } from '@chucky.cloud/sdk';
+
+function getAssistantText(msg: SDKMessage): string | null
 ```
 
 #### Example
 
 ```typescript
-const id = session.sessionId;
-// Save for later resumption
-localStorage.setItem('lastSession', id);
+for await (const msg of session.stream()) {
+  if (msg.type === 'assistant') {
+    const text = getAssistantText(msg);
+    console.log(text);
+  }
+}
 ```
 
-## SessionResult
+---
 
-The result returned from `send()` and `prompt()`.
+### getResultText()
+
+Extract the result text from a result message.
 
 ```typescript
-interface SessionResult {
+import { getResultText } from '@chucky.cloud/sdk';
+
+function getResultText(msg: SDKMessage): string | null
+```
+
+## SDK Message Types
+
+### SDKAssistantMessage
+
+```typescript
+interface SDKAssistantMessage {
+  type: 'assistant';
+  uuid: string;
+  session_id: string;
+  message: {
+    role: 'assistant';
+    content: ContentBlock[];
+  };
+  parent_tool_use_id: string | null;
+}
+```
+
+### SDKResultMessage
+
+```typescript
+interface SDKResultMessageSuccess {
   type: 'result';
-  subtype?: 'success' | 'error' | 'interrupted';
-  text?: string;                    // Final text response
-  messages?: Message[];             // Full conversation
-  total_cost_usd?: number;          // Total cost
-  duration_secs?: number;           // Response time
-  turn_count?: number;              // Number of turns
-  usage?: Usage;                    // Token usage
-  session_id?: string;              // Session ID
-  error?: string;                   // Error message
+  subtype: 'success';
+  uuid: string;
+  session_id: string;
+  duration_ms: number;
+  duration_api_ms: number;
+  is_error: boolean;
+  num_turns: number;
+  result: string;
+  total_cost_usd: number;
+  usage: {
+    input_tokens: number;
+    output_tokens: number;
+    cache_creation_input_tokens: number;
+    cache_read_input_tokens: number;
+  };
 }
 ```
 
-### Example
+### SDKSystemMessage
 
 ```typescript
-const result = await session.send('Hello');
-
-if (result.subtype === 'success') {
-  console.log('Response:', result.text);
-  console.log('Cost:', result.total_cost_usd);
-  console.log('Turns:', result.turn_count);
-} else if (result.subtype === 'error') {
-  console.error('Error:', result.error);
+interface SDKSystemMessageInit {
+  type: 'system';
+  subtype: 'init';
+  uuid: string;
+  session_id: string;
+  cwd: string;
+  tools: string[];
+  mcp_servers: Array<{ name: string; status: string }>;
+  model: string;
+  permissionMode: string;
 }
-```
-
-## StreamingEvent
-
-Events received during streaming.
-
-```typescript
-type StreamingEvent =
-  | { type: 'text'; text: string }
-  | { type: 'tool_use'; id: string; name: string; input: Record<string, unknown> }
-  | { type: 'tool_result'; id: string; content: unknown; isError?: boolean }
-  | { type: 'thinking'; thinking: string }
-  | { type: 'error'; error: Error };
 ```
 
 ## Usage Patterns
@@ -257,27 +283,26 @@ type StreamingEvent =
 ### Basic Conversation
 
 ```typescript
-const session = await client.createSession();
+const client = new ChuckyClient({ token });
+const session = client.createSession();
 
-const r1 = await session.send('Hi, my name is Alice');
-const r2 = await session.send('What is my name?');
-console.log(r2.text); // "Your name is Alice."
+// First turn
+await session.send('Hi, my name is Alice');
+for await (const msg of session.stream()) {
+  if (msg.type === 'assistant') {
+    console.log(getAssistantText(msg));
+  }
+}
 
-await session.close();
-```
+// Second turn (Claude remembers context)
+await session.send('What is my name?');
+for await (const msg of session.stream()) {
+  if (msg.type === 'assistant') {
+    console.log(getAssistantText(msg)); // "Your name is Alice."
+  }
+}
 
-### With Event Handlers
-
-```typescript
-const session = await client.createSession();
-
-session.on({
-  onText: (text) => appendToChat(text),
-  onToolUse: (tool) => showToolIndicator(tool.name),
-  onComplete: () => hideTypingIndicator(),
-});
-
-await session.send('Search for restaurants near me');
+session.close();
 ```
 
 ### Resuming Sessions
@@ -287,24 +312,39 @@ await session.send('Search for restaurants near me');
 const savedSessionId = localStorage.getItem('sessionId');
 
 if (savedSessionId) {
-  const session = await client.resumeSession(savedSessionId);
-  const result = await session.send('Continue our conversation');
+  const session = client.resumeSession(savedSessionId);
+  await session.send('Continue our conversation');
+  for await (const msg of session.stream()) {
+    // handle messages
+  }
 } else {
-  const session = await client.createSession();
-  localStorage.setItem('sessionId', session.sessionId);
+  const session = client.createSession();
+  // Save session ID after first message
+  await session.send('Hello');
+  for await (const msg of session.stream()) {
+    if (msg.type === 'system') {
+      localStorage.setItem('sessionId', msg.session_id);
+    }
+  }
 }
 ```
 
 ### Error Handling
 
 ```typescript
-const session = await client.createSession();
+const session = client.createSession();
 
 try {
-  const result = await session.send('Complex query...');
+  await session.send('Complex query...');
 
-  if (result.subtype === 'error') {
-    console.error('Claude error:', result.error);
+  for await (const msg of session.stream()) {
+    if (msg.type === 'result') {
+      if (msg.subtype === 'success') {
+        console.log('Result:', msg.result);
+      } else {
+        console.error('Error:', msg.errors);
+      }
+    }
   }
 } catch (error) {
   if (error instanceof BudgetExceededError) {
@@ -313,6 +353,19 @@ try {
     showGenericError(error);
   }
 } finally {
-  await session.close();
+  session.close();
 }
+```
+
+### Using `await using` (TypeScript 5.2+)
+
+```typescript
+{
+  await using session = client.createSession();
+
+  await session.send('Hello');
+  for await (const msg of session.stream()) {
+    // handle messages
+  }
+} // session.close() called automatically
 ```

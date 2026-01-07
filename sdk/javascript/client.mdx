@@ -5,7 +5,7 @@ description: JavaScript/TypeScript SDK client reference
 
 # ChuckyClient
 
-The main client class for interacting with Chucky.
+The main client class for interacting with Chucky. Matches the official Claude Agent SDK V2 interface.
 
 ## Installation
 
@@ -16,7 +16,7 @@ npm install @chucky.cloud/sdk
 ## Import
 
 ```typescript
-import { ChuckyClient, createClient } from '@chucky.cloud/sdk';
+import { ChuckyClient, createClient, getAssistantText } from '@chucky.cloud/sdk';
 ```
 
 ## Constructor
@@ -51,56 +51,23 @@ const client = new ChuckyClient({
 
 ### prompt()
 
-Send a one-shot prompt (stateless).
+Send a one-shot prompt (stateless). Creates a session, sends the message, and returns the result.
 
 ```typescript
-async prompt(options: PromptOptions): Promise<PromptResult>
-```
-
-#### PromptOptions
-
-| Property | Type | Description |
-|----------|------|-------------|
-| `message` | `string` | The prompt message |
-| `model` | `string` | Claude model to use |
-| `systemPrompt` | `string` | System prompt |
-| `tools` | `Tool[]` | Available tools |
-| `mcpServers` | `McpServer[]` | MCP servers |
-| `maxTurns` | `number` | Max conversation turns |
-| `maxBudgetUsd` | `number` | Budget limit |
-| `outputFormat` | `OutputFormat` | Structured output format |
-
-#### Example
-
-```typescript
-const result = await client.prompt({
-  message: 'What is 2 + 2?',
-  model: 'claude-sonnet-4-5-20250929',
-});
-
-console.log(result.text); // "4"
-console.log(result.total_cost_usd); // 0.0001
-```
-
----
-
-### promptStream()
-
-Send a prompt with streaming response.
-
-```typescript
-async *promptStream(options: PromptOptions): AsyncGenerator<StreamingEvent, PromptResult>
+async prompt(message: string, options?: SessionOptions): Promise<SDKResultMessage>
 ```
 
 #### Example
 
 ```typescript
-for await (const event of client.promptStream({
-  message: 'Write a poem',
-})) {
-  if (event.type === 'text') {
-    process.stdout.write(event.text);
-  }
+const result = await client.prompt(
+  'What is 2 + 2?',
+  { model: 'claude-sonnet-4-5-20250929' }
+);
+
+if (result.subtype === 'success') {
+  console.log(result.result); // "4"
+  console.log(result.total_cost_usd); // 0.0001
 }
 ```
 
@@ -108,18 +75,23 @@ for await (const event of client.promptStream({
 
 ### createSession()
 
-Create a new conversation session.
+Create a new conversation session. Returns the session immediately; connection happens on first `send()`.
 
 ```typescript
-async createSession(options?: SessionOptions): Promise<Session>
+createSession(options?: SessionOptions): Session
 ```
 
 #### SessionOptions
 
-Extends `PromptOptions` with:
-
 | Property | Type | Description |
 |----------|------|-------------|
+| `model` | `string` | Claude model to use |
+| `systemPrompt` | `string` | System prompt |
+| `tools` | `Tool[]` | Available tools |
+| `mcpServers` | `McpServer[]` | MCP servers |
+| `maxTurns` | `number` | Max conversation turns |
+| `maxBudgetUsd` | `number` | Budget limit |
+| `outputFormat` | `OutputFormat` | Structured output format |
 | `sessionId` | `string` | Resume existing session |
 | `forkSession` | `string` | Fork from session ID |
 | `continue` | `boolean` | Continue from last message |
@@ -127,10 +99,19 @@ Extends `PromptOptions` with:
 #### Example
 
 ```typescript
-const session = await client.createSession({
+const session = client.createSession({
   model: 'claude-sonnet-4-5-20250929',
   systemPrompt: 'You are a helpful assistant.',
 });
+
+await session.send('Hello!');
+for await (const msg of session.stream()) {
+  if (msg.type === 'assistant') {
+    console.log(getAssistantText(msg));
+  }
+}
+
+session.close();
 ```
 
 ---
@@ -140,37 +121,38 @@ const session = await client.createSession({
 Resume an existing session by ID.
 
 ```typescript
-async resumeSession(
+resumeSession(
   sessionId: string,
   options?: Omit<SessionOptions, 'sessionId'>
-): Promise<Session>
+): Session
 ```
 
 #### Example
 
 ```typescript
-const session = await client.resumeSession('session-123', {
-  model: 'claude-sonnet-4-5-20250929',
-});
+const session = client.resumeSession('session-123');
 
-const result = await session.send('What did we discuss before?');
+await session.send('What did we discuss before?');
+for await (const msg of session.stream()) {
+  // handle messages
+}
 ```
 
 ---
 
 ### close()
 
-Close all sessions and disconnect.
+Close all active sessions.
 
 ```typescript
-async close(): Promise<void>
+close(): void
 ```
 
 #### Example
 
 ```typescript
 // Clean up when done
-await client.close();
+client.close();
 ```
 
 ---
@@ -192,43 +174,6 @@ on(handlers: ClientEventHandlers): this
 | `onReconnect` | `(attempt: number)` | Reconnection attempt |
 | `onError` | `(error: Error)` | Error occurred |
 
-#### Example
-
-```typescript
-client.on({
-  onConnect: () => console.log('Connected'),
-  onDisconnect: (reason) => console.log('Disconnected:', reason),
-  onError: (error) => console.error('Error:', error),
-});
-```
-
-## Properties
-
-### status
-
-Current connection status.
-
-```typescript
-get status(): ConnectionStatus
-```
-
-```typescript
-type ConnectionStatus =
-  | 'disconnected'
-  | 'connecting'
-  | 'connected'
-  | 'reconnecting'
-  | 'error';
-```
-
-#### Example
-
-```typescript
-if (client.status === 'connected') {
-  await client.prompt({ message: 'Hello' });
-}
-```
-
 ## Factory Function
 
 ### createClient()
@@ -245,21 +190,37 @@ function createClient(options: ClientOptions): ChuckyClient
 const client = createClient({ token: 'your-token' });
 ```
 
+## Helper Functions
+
+### getAssistantText()
+
+Extract text content from an assistant message.
+
+```typescript
+import { getAssistantText } from '@chucky.cloud/sdk';
+
+const text = getAssistantText(msg);
+```
+
+### getResultText()
+
+Extract the result text from a result message.
+
+```typescript
+import { getResultText } from '@chucky.cloud/sdk';
+
+const text = getResultText(msg);
+```
+
 ## Complete Example
 
 ```typescript
-import { ChuckyClient, tool, textResult } from '@chucky.cloud/sdk';
+import { ChuckyClient, tool, getAssistantText } from '@chucky.cloud/sdk';
 
 // Create client
 const client = new ChuckyClient({
   token: process.env.CHUCKY_TOKEN,
   debug: true,
-});
-
-// Set up event handlers
-client.on({
-  onConnect: () => console.log('Connected to Chucky'),
-  onError: (err) => console.error('Client error:', err),
 });
 
 // Define a tool
@@ -275,29 +236,38 @@ const calculatorTool = tool(
   },
   async ({ expression }) => {
     const result = eval(expression); // Use a proper math lib in production
-    return textResult(String(result));
+    return { content: [{ type: 'text', text: String(result) }] };
   }
 );
 
 // Create a session with tools
-const session = await client.createSession({
+const session = client.createSession({
   model: 'claude-sonnet-4-5-20250929',
   systemPrompt: 'You are a math tutor.',
   tools: [calculatorTool],
 });
 
-// Send messages
-const result = await session.send('What is 15% of 230?');
-console.log(result.text);
+// Send message and stream response
+await session.send('What is 15% of 230?');
+for await (const msg of session.stream()) {
+  if (msg.type === 'assistant') {
+    const text = getAssistantText(msg);
+    if (text) process.stdout.write(text);
+  }
+  if (msg.type === 'result' && msg.subtype === 'success') {
+    console.log('\nCost:', msg.total_cost_usd);
+  }
+}
 
-// Stream a response
-for await (const event of session.sendStream('Explain the quadratic formula')) {
-  if (event.type === 'text') {
-    process.stdout.write(event.text);
+// Multi-turn conversation
+await session.send('Explain how you calculated that');
+for await (const msg of session.stream()) {
+  if (msg.type === 'assistant') {
+    console.log(getAssistantText(msg));
   }
 }
 
 // Clean up
-await session.close();
-await client.close();
+session.close();
+client.close();
 ```
