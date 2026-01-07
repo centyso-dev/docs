@@ -26,7 +26,6 @@
             "pages": [
               "concepts/sessions",
               "concepts/tools",
-              "concepts/mcp-servers",
               "concepts/streaming"
             ]
           },
@@ -48,7 +47,6 @@
             "pages": [
               "sdk/javascript/client",
               "sdk/javascript/session",
-              "sdk/javascript/tools",
               "sdk/javascript/types"
             ]
           },
@@ -56,7 +54,6 @@
             "group": "Python",
             "pages": [
               "sdk/python/client",
-              "sdk/python/tools",
               "sdk/python/types"
             ]
           }

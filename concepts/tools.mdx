@@ -9,7 +9,7 @@ Tools let Claude call functions that execute in your application - query databas
 
 ## How It Works
 
-When you define a tool with a handler, the handler runs in **your application** (not on the server). Here's the flow:
+When you define a tool with a handler, the handler runs in **your application** (not on the server):
 
 ```
 Your App                    Chucky Cloud                    Claude
@@ -17,18 +17,17 @@ Your App                    Chucky Cloud                    Claude
    │  createSession(mcpServers)  │                            │
    │────────────────────────────►│                            │
    │                             │                            │
-   │  send("Get weather in Tokyo") │    prompt + tools        │
+   │  send("Get weather")        │     prompt + tools         │
    │────────────────────────────►│───────────────────────────►│
    │                             │                            │
    │                             │     tool_call: get_weather │
    │   tool_call: get_weather    │◄───────────────────────────│
    │◄────────────────────────────│                            │
    │                             │                            │
-   │   [your handler executes]   │                            │
-   │   → fetchWeatherAPI(tokyo)  │                            │
+   │   [handler executes]        │                            │
    │   → returns "Sunny, 22°C"   │                            │
    │                             │                            │
-   │   tool_result: "Sunny, 22°C"│     tool_result            │
+   │   tool_result: "Sunny"      │     tool_result            │
    │────────────────────────────►│───────────────────────────►│
    │                             │                            │
    │                             │     "It's sunny and 22°C"  │
@@ -36,27 +35,17 @@ Your App                    Chucky Cloud                    Claude
    │◄────────────────────────────│                            │
 ```
 
-This means your tools have access to everything in your app: databases, APIs, the DOM (in browser), local storage, etc.
+Your tools have access to everything in your app: databases, APIs, the DOM, local storage, etc.
 
-## Creating Tools
+---
 
-A tool is an object with four properties:
+## JavaScript
 
-```typescript
-const myTool = {
-  name: 'tool_name',           // Unique identifier
-  description: 'What it does', // Helps Claude decide when to use it
-  inputSchema: { ... },        // JSON Schema for parameters
-  handler: async (input) => {  // Function that runs in YOUR app
-    // ... your code ...
-    return { content: [{ type: 'text', text: 'result' }] };
-  }
-};
-```
-
-### Example: Weather Tool
+### Simple Object Syntax
 
 ```typescript
+import { ChuckyClient, getAssistantText } from '@chucky.cloud/sdk';
+
 const weatherTool = {
   name: 'get_weather',
   description: 'Get current weather for a city',
@@ -70,31 +59,17 @@ const weatherTool = {
   },
   handler: async ({ city, unit = 'celsius' }) => {
     const weather = await fetchWeatherAPI(city, unit);
-    return {
-      content: [{
-        type: 'text',
-        text: `${city}: ${weather.temp}°${unit === 'celsius' ? 'C' : 'F'}, ${weather.condition}`
-      }]
-    };
+    return { content: [{ type: 'text', text: `${city}: ${weather.temp}°` }] };
   }
 };
-```
-
-## Using Tools
-
-Tools must be wrapped in an MCP server and passed to `createSession`:
-
-```typescript
-import { ChuckyClient, getAssistantText } from '@chucky.cloud/sdk';
 
 const client = new ChuckyClient({ token });
-
 const session = client.createSession({
   model: 'claude-sonnet-4-5-20250929',
   mcpServers: [{
     name: 'my-tools',
     version: '1.0.0',
-    tools: [weatherTool, searchTool, calculatorTool]
+    tools: [weatherTool]
   }],
 });
 
@@ -109,9 +84,148 @@ for await (const msg of session.stream()) {
 session.close();
 ```
 
+### McpServerBuilder
+
+For multiple related tools, use the builder pattern:
+
+```typescript
+import { McpServerBuilder, textResult, errorResult } from '@chucky.cloud/sdk';
+
+const fileServer = new McpServerBuilder('file-tools', '1.0.0')
+  .addTool({
+    name: 'read_file',
+    description: 'Read contents of a file',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        path: { type: 'string', description: 'File path' },
+      },
+      required: ['path'],
+    },
+    handler: async ({ path }) => {
+      const content = await fs.readFile(path, 'utf-8');
+      return textResult(content);
+    },
+  })
+  .addTool({
+    name: 'write_file',
+    description: 'Write content to a file',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        path: { type: 'string' },
+        content: { type: 'string' },
+      },
+      required: ['path', 'content'],
+    },
+    handler: async ({ path, content }) => {
+      await fs.writeFile(path, content);
+      return textResult(`Wrote ${content.length} bytes`);
+    },
+  })
+  .build();
+
+const session = client.createSession({
+  mcpServers: [fileServer],
+});
+```
+
+### Result Helpers
+
+```typescript
+import { textResult, errorResult, imageResult } from '@chucky.cloud/sdk';
+
+// Success
+return textResult('Operation completed');
+
+// Error
+return errorResult('File not found');
+
+// Image
+return imageResult(base64Data, 'image/png');
+```
+
+---
+
+## Python
+
+### Tool Decorator
+
+The `@tool` decorator automatically infers the JSON schema from type hints:
+
+```python
+from chucky import tool, text_result, error_result
+
+@tool('get_weather', 'Get weather for a city')
+async def get_weather(city: str, unit: str = 'celsius') -> ToolResult:
+    """
+    Args:
+        city: City name
+        unit: Temperature unit (celsius or fahrenheit)
+    """
+    weather = await fetch_weather(city, unit)
+    return text_result(f'{city}: {weather}')
+```
+
+### With Pydantic Model
+
+```python
+from pydantic import BaseModel, Field
+from typing import Literal
+
+class WeatherInput(BaseModel):
+    city: str = Field(description='City name')
+    unit: Literal['celsius', 'fahrenheit'] = Field(
+        default='celsius',
+        description='Temperature unit'
+    )
+
+@tool('get_weather', 'Get weather', schema=WeatherInput)
+async def get_weather(args: dict) -> ToolResult:
+    return text_result(f'{args["city"]}: sunny')
+```
+
+### MCP Server
+
+```python
+from chucky import Chucky, create_mcp_server, tool, text_result
+
+@tool('read_file', 'Read a file')
+async def read_file(path: str) -> ToolResult:
+    with open(path) as f:
+        return text_result(f.read())
+
+@tool('write_file', 'Write a file')
+async def write_file(path: str, content: str) -> ToolResult:
+    with open(path, 'w') as f:
+        f.write(content)
+    return text_result('File written')
+
+file_server = create_mcp_server('file-tools', [read_file, write_file])
+
+client = Chucky(token='...')
+async with client.session(mcp_servers={'files': file_server}) as session:
+    result = await session.send('Read the config.json file')
+```
+
+### Type Mapping
+
+| Python Type | JSON Schema |
+|-------------|-------------|
+| `str` | `string` |
+| `int` | `integer` |
+| `float` | `number` |
+| `bool` | `boolean` |
+| `List[T]` | `array` |
+| `Dict[str, T]` | `object` |
+| `Optional[T]` | Nullable |
+| `Literal['a', 'b']` | `enum` |
+
+---
+
 ## Input Schema
 
-Use JSON Schema to define tool parameters:
+Use JSON Schema to define parameters:
 
 ```typescript
 const searchTool = {
@@ -145,21 +259,23 @@ const searchTool = {
         description: 'Filter by tags',
       },
     },
-    required: ['query'],  // Only query is required
+    required: ['query'],
   },
   handler: async ({ query, limit = 10, sort = 'relevance', tags = [] }) => {
     const results = await db.products.search({ query, limit, sort, tags });
-    return { content: [{ type: 'text', text: JSON.stringify(results) }] };
+    return textResult(JSON.stringify(results));
   }
 };
 ```
+
+---
 
 ## Tool Results
 
 Handlers return a `ToolResult` object:
 
 ```typescript
-// Success with text
+// Text
 return {
   content: [{ type: 'text', text: 'Operation completed' }]
 };
@@ -170,7 +286,7 @@ return {
   isError: true
 };
 
-// Image (base64)
+// Image
 return {
   content: [{
     type: 'image',
@@ -188,24 +304,11 @@ return {
 };
 ```
 
-### Result Helpers
-
-```typescript
-import { textResult, errorResult, imageResult } from '@chucky.cloud/sdk';
-
-return textResult('Success!');
-// → { content: [{ type: 'text', text: 'Success!' }] }
-
-return errorResult('Something went wrong');
-// → { content: [{ type: 'text', text: 'Something went wrong' }], isError: true }
-
-return imageResult(base64Data, 'image/png');
-// → { content: [{ type: 'image', data: '...', mimeType: 'image/png' }] }
-```
+---
 
 ## Browser Tools
 
-In the browser, tools have access to the DOM and browser APIs:
+In the browser, tools have access to the DOM:
 
 ```typescript
 const highlightTool = {
@@ -222,16 +325,16 @@ const highlightTool = {
   handler: async ({ selector, color = 'yellow' }) => {
     const element = document.querySelector(selector);
     if (!element) {
-      return { content: [{ type: 'text', text: 'Element not found' }], isError: true };
+      return errorResult('Element not found');
     }
     element.style.backgroundColor = color;
-    return { content: [{ type: 'text', text: `Highlighted ${selector}` }] };
+    return textResult(`Highlighted ${selector}`);
   }
 };
 
 const showModalTool = {
   name: 'show_modal',
-  description: 'Show a modal dialog to the user',
+  description: 'Show a modal dialog',
   inputSchema: {
     type: 'object',
     properties: {
@@ -241,18 +344,19 @@ const showModalTool = {
     required: ['message'],
   },
   handler: async ({ title, message }) => {
-    // Your app's modal component
     await showModal({ title, message });
-    return { content: [{ type: 'text', text: 'Modal shown' }] };
+    return textResult('Modal shown');
   }
 };
 ```
+
+---
 
 ## Best Practices
 
 <AccordionGroup>
   <Accordion title="Write clear descriptions">
-    Claude uses descriptions to decide when to use tools. Be specific:
+    Claude uses descriptions to decide when to use tools:
 
     ```typescript
     // Good
@@ -295,99 +399,15 @@ const showModalTool = {
     ```
   </Accordion>
 
-  <Accordion title="Validate inputs">
-    Even with schema validation, validate in your handler:
+  <Accordion title="Group related tools">
+    Use MCP servers to bundle related tools:
 
     ```typescript
-    handler: async ({ email }) => {
-      if (!isValidEmail(email)) {
-        return errorResult('Invalid email format');
-      }
-      // ...
-    }
+    const fileServer = new McpServerBuilder('file-tools', '1.0.0')
+      .addTool({ name: 'read_file', ... })
+      .addTool({ name: 'write_file', ... })
+      .addTool({ name: 'list_files', ... })
+      .build();
     ```
   </Accordion>
 </AccordionGroup>
-
-## Complete Example
-
-```typescript
-import { createToken, createBudget, ChuckyClient, getAssistantText } from '@chucky.cloud/sdk';
-
-// Define tools
-const getCurrentTime = {
-  name: 'get_current_time',
-  description: 'Get the current date and time',
-  inputSchema: { type: 'object', properties: {} },
-  handler: async () => ({
-    content: [{ type: 'text', text: new Date().toISOString() }]
-  })
-};
-
-const searchUsers = {
-  name: 'search_users',
-  description: 'Search for users in the database',
-  inputSchema: {
-    type: 'object',
-    properties: {
-      query: { type: 'string', description: 'Name or email to search' },
-      limit: { type: 'number', description: 'Max results' },
-    },
-    required: ['query'],
-  },
-  handler: async ({ query, limit = 10 }) => {
-    const users = await db.users.search(query, { limit });
-    return { content: [{ type: 'text', text: JSON.stringify(users, null, 2) }] };
-  }
-};
-
-const sendNotification = {
-  name: 'send_notification',
-  description: 'Send a notification to a user',
-  inputSchema: {
-    type: 'object',
-    properties: {
-      userId: { type: 'string' },
-      message: { type: 'string' },
-    },
-    required: ['userId', 'message'],
-  },
-  handler: async ({ userId, message }) => {
-    await notificationService.send(userId, message);
-    return { content: [{ type: 'text', text: `Notification sent to ${userId}` }] };
-  }
-};
-
-// Create session with tools
-const token = await createToken({
-  userId: 'admin',
-  projectId: process.env.PROJECT_ID,
-  secret: process.env.HMAC_SECRET,
-  budget: createBudget({ aiDollars: 5, computeHours: 1, window: 'day' }),
-});
-
-const client = new ChuckyClient({ token });
-const session = client.createSession({
-  model: 'claude-sonnet-4-5-20250929',
-  systemPrompt: 'You are a helpful admin assistant.',
-  mcpServers: [{
-    name: 'admin-tools',
-    version: '1.0.0',
-    tools: [getCurrentTime, searchUsers, sendNotification]
-  }],
-});
-
-// Claude can now use these tools
-await session.send('Find all users named John and send them a welcome message');
-
-for await (const msg of session.stream()) {
-  if (msg.type === 'assistant') {
-    console.log(getAssistantText(msg));
-  }
-  if (msg.type === 'result') {
-    console.log('Cost:', msg.total_cost_usd);
-  }
-}
-
-session.close();
-```
