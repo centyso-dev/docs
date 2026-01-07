@@ -126,8 +126,14 @@
   },
   "footer": {
     "socials": {
+      "github": "https://github.com/Chucky-Cloud",
       "x": "https://x.com/chucky_cloud",
       "discord": "https://discord.gg/e6p2TQYbvz"
+    }
+  },
+  "analytics": {
+    "ga4": {
+      "measurementId": "G-SYLT8K6TTR"
     }
   }
 }
