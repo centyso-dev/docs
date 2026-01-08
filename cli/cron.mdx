@@ -5,11 +5,11 @@ description: Schedule recurring prompts with cron expressions
 
 # Cron Jobs
 
-Define scheduled prompts in your `.chucky.json` configuration file. When you run `chucky deploy`, your cron jobs are synced to Chucky's scheduler.
+Define scheduled prompts in your `chucky.json` configuration file. When you run `chucky deploy`, your cron jobs are synced to Chucky's scheduler.
 
 ## Configuration
 
-Add a `crons` array to your `.chucky.json`:
+Add a `crons` array to your `chucky.json`:
 
 ```json
 {
@@ -90,7 +90,7 @@ interface CronDefinition {
 
 When you run `chucky deploy`, the CLI:
 
-1. Reads cron definitions from `.chucky.json`
+1. Reads cron definitions from `chucky.json`
 2. Deletes any existing cron schedules for the project
 3. Creates fresh schedules for each enabled cron
 
