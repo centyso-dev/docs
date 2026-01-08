@@ -8,6 +8,7 @@ description: Command-line interface for interacting with Chucky
 The Chucky CLI (`@chucky.cloud/cli`) is a powerful command-line tool for developers to:
 
 - **Deploy workspaces** to Chucky cloud
+- **Schedule cron jobs** for recurring prompts
 - **Run prompts** against any project in your account
 - **Enable Claude to control your machine** with host tools (possession mode)
 
@@ -34,7 +35,7 @@ You'll be prompted to enter your API key (found in [app.chucky.cloud](https://ap
 | `chucky login` | Authenticate with your Chucky account |
 | `chucky list` | List all projects in your account |
 | `chucky init` | Initialize a new project in the current directory |
-| `chucky deploy` | Deploy workspace to Chucky cloud |
+| `chucky deploy` | Deploy workspace and cron jobs to Chucky cloud |
 | `chucky keys` | Show HMAC key for current project |
 | `chucky prompt` | Send prompts to any project |
 | `chucky config anthropic` | Set Anthropic API key for a project |
@@ -69,9 +70,12 @@ The `--allow-possession` flag is a powerful feature that lets Claude execute com
 
 ## Next Steps
 
-<CardGroup cols={2}>
+<CardGroup cols={3}>
   <Card title="Prompt Command" icon="terminal" href="/cli/prompt">
     All options for the prompt command
+  </Card>
+  <Card title="Cron Jobs" icon="clock" href="/cli/cron">
+    Schedule recurring prompts
   </Card>
   <Card title="Possession Mode" icon="ghost" href="/cli/possession">
     Let Claude control your machine

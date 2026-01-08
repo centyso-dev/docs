@@ -1,0 +1,310 @@
+---
+title: Cron Jobs
+description: Schedule recurring prompts with cron expressions
+---
+
+# Cron Jobs
+
+Define scheduled prompts in your `.chucky.json` configuration file. When you run `chucky deploy`, your cron jobs are synced to Chucky's scheduler.
+
+## Configuration
+
+Add a `crons` array to your `.chucky.json`:
+
+```json
+{
+  "crons": [
+    {
+      "cron": "0 9 * * 1-5",
+      "timezone": "America/New_York",
+      "message": "Generate daily standup summary from yesterday's git commits",
+      "model": "claude-sonnet-4-5-20250929",
+      "maxTurns": 5,
+      "maxBudgetUsd": 0.25
+    }
+  ]
+}
+```
+
+## Cron Expression Format
+
+Standard 5-field cron expressions:
+
+```
+┌───────────── minute (0-59)
+│ ┌───────────── hour (0-23)
+│ │ ┌───────────── day of month (1-31)
+│ │ │ ┌───────────── month (1-12)
+│ │ │ │ ┌───────────── day of week (0-6, Sun=0)
+│ │ │ │ │
+* * * * *
+```
+
+### Examples
+
+| Expression | Description |
+|------------|-------------|
+| `0 9 * * *` | Every day at 9:00 AM |
+| `0 9 * * 1-5` | Weekdays at 9:00 AM |
+| `*/15 * * * *` | Every 15 minutes |
+| `0 0 1 * *` | First day of every month at midnight |
+| `0 0 * * 0` | Every Sunday at midnight |
+
+## Full Schema
+
+```typescript
+interface CronDefinition {
+  // Required
+  cron: string;           // Cron expression
+  message: string;        // Prompt to execute
+
+  // Scheduling
+  timezone?: string;      // IANA timezone (default: "UTC")
+  enabled?: boolean;      // Whether active (default: true)
+
+  // Callback
+  callback?: {
+    url: string;          // Webhook URL for results
+    headers?: Record<string, string>;
+    secret?: string;      // HMAC signing secret
+  };
+
+  // SDK Options
+  model?: string;
+  maxTurns?: number;
+  maxBudgetUsd?: number;
+  maxThinkingTokens?: number;
+  systemPrompt?: string;
+  tools?: string[];
+  allowedTools?: string[];
+  disallowedTools?: string[];
+  env?: Record<string, string>;
+  outputFormat?: {
+    type: "json_schema";
+    schema: object;
+  };
+}
+```
+
+## Deploying Crons
+
+When you run `chucky deploy`, the CLI:
+
+1. Reads cron definitions from `.chucky.json`
+2. Deletes any existing cron schedules for the project
+3. Creates fresh schedules for each enabled cron
+
+```bash
+chucky deploy
+```
+
+Output:
+
+```
+Deploying project: my-project
+
+Syncing cron jobs...
+  ✓ Created: 0 9 * * 1-5 (America/New_York)
+  ✓ Created: 0 0 * * 0 (UTC)
+  ○ Skipped (disabled): 0 12 * * * (UTC)
+
+Synced 3 cron job(s)
+```
+
+## Example Configurations
+
+### Daily Report with Slack Webhook
+
+```json
+{
+  "crons": [
+    {
+      "cron": "0 9 * * 1-5",
+      "timezone": "America/New_York",
+      "message": "Generate a summary of yesterday's git commits and create a standup report",
+      "model": "claude-sonnet-4-5-20250929",
+      "systemPrompt": "You are a DevOps assistant. Format output for Slack.",
+      "maxTurns": 5,
+      "maxBudgetUsd": 0.25,
+      "callback": {
+        "url": "https://hooks.slack.com/services/xxx/yyy/zzz"
+      }
+    }
+  ]
+}
+```
+
+### Weekly Metrics with Structured Output
+
+```json
+{
+  "crons": [
+    {
+      "cron": "0 0 * * 0",
+      "timezone": "UTC",
+      "message": "Generate weekly metrics report for the past 7 days",
+      "maxBudgetUsd": 1.00,
+      "outputFormat": {
+        "type": "json_schema",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "summary": { "type": "string" },
+            "metrics": {
+              "type": "object",
+              "properties": {
+                "commits": { "type": "number" },
+                "prs_merged": { "type": "number" },
+                "issues_closed": { "type": "number" }
+              }
+            },
+            "highlights": {
+              "type": "array",
+              "items": { "type": "string" }
+            }
+          },
+          "required": ["summary", "metrics"]
+        }
+      },
+      "callback": {
+        "url": "https://api.myapp.com/webhooks/metrics",
+        "headers": {
+          "X-API-Key": "your-api-key"
+        },
+        "secret": "whsec_xxx"
+      }
+    }
+  ]
+}
+```
+
+### Multiple Crons with Different Schedules
+
+```json
+{
+  "crons": [
+    {
+      "cron": "0 8 * * 1-5",
+      "timezone": "Europe/London",
+      "message": "Check for security vulnerabilities in dependencies",
+      "maxTurns": 10,
+      "maxBudgetUsd": 0.50
+    },
+    {
+      "cron": "0 18 * * 5",
+      "timezone": "Europe/London",
+      "message": "Generate weekly code review summary",
+      "maxBudgetUsd": 0.75
+    },
+    {
+      "cron": "0 0 1 * *",
+      "message": "Generate monthly usage report",
+      "maxBudgetUsd": 1.00,
+      "enabled": false
+    }
+  ]
+}
+```
+
+## Callback Webhooks
+
+Results are POSTed to your callback URL when the cron completes:
+
+```json
+{
+  "success": true,
+  "text": "Generated report content...",
+  "result": {
+    "type": "result",
+    "subtype": "success",
+    "total_cost_usd": 0.015
+  }
+}
+```
+
+### HMAC Verification
+
+If you provide a `secret`, the request includes an `X-Chucky-Signature` header:
+
+```javascript
+const crypto = require('crypto');
+
+function verifySignature(body, signature, secret) {
+  const expected = crypto
+    .createHmac('sha256', secret)
+    .update(body)
+    .digest('hex');
+  return signature === expected;
+}
+
+// In your webhook handler
+app.post('/webhook', (req, res) => {
+  const signature = req.headers['x-chucky-signature'];
+  const isValid = verifySignature(
+    JSON.stringify(req.body),
+    signature,
+    'whsec_xxx'
+  );
+
+  if (!isValid) {
+    return res.status(401).send('Invalid signature');
+  }
+
+  // Process the result...
+});
+```
+
+## Timezones
+
+Use IANA timezone identifiers:
+
+| Timezone | Example Cities |
+|----------|----------------|
+| `UTC` | Default |
+| `America/New_York` | New York, Miami |
+| `America/Los_Angeles` | Los Angeles, Seattle |
+| `Europe/London` | London |
+| `Europe/Paris` | Paris, Berlin |
+| `Asia/Tokyo` | Tokyo |
+| `Asia/Shanghai` | Shanghai, Beijing |
+| `Australia/Sydney` | Sydney |
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Set appropriate budgets">
+    Always set `maxBudgetUsd` to prevent runaway costs. Start low and increase based on actual usage.
+  </Accordion>
+
+  <Accordion title="Use callbacks for production">
+    Don't rely on polling. Configure webhooks to receive results immediately when crons complete.
+  </Accordion>
+
+  <Accordion title="Test with disabled crons">
+    Set `enabled: false` while testing your configuration, then enable when ready.
+  </Accordion>
+
+  <Accordion title="Use structured output for data pipelines">
+    When feeding results into other systems, use `outputFormat` to ensure consistent JSON structure.
+  </Accordion>
+</AccordionGroup>
+
+## Viewing Cron Status
+
+View your cron jobs in the [Chucky Dashboard](https://app.chucky.cloud):
+
+- **Next run time** - When the cron will next execute
+- **Last run status** - Success/failure of the most recent run
+- **Run history** - Past executions with results
+
+## Concurrency
+
+Cron jobs share the same concurrency limits as the Incubate API:
+
+| Tier | Concurrent Tasks |
+|------|------------------|
+| Hobby/Free | 2 |
+| Starter | 5 |
+| Pro | 10 |
+
+If your cron triggers while at capacity, it will queue and execute when a slot becomes available.

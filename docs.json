@@ -34,6 +34,7 @@
             "pages": [
               "cli/index",
               "cli/prompt",
+              "cli/cron",
               "cli/possession"
             ]
           },
