@@ -65,6 +65,14 @@
               "sdk/python/client",
               "sdk/python/types"
             ]
+          },
+          {
+            "group": "Go",
+            "pages": [
+              "sdk/go/client",
+              "sdk/go/session",
+              "sdk/go/tools"
+            ]
           }
         ]
       },

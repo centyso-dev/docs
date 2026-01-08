@@ -1,0 +1,326 @@
+---
+title: Session
+description: Go SDK Session reference
+---
+
+# Session
+
+The Session manages multi-turn conversations with Claude.
+
+## Creating Sessions
+
+Sessions are created via the client.
+
+```go
+session := client.CreateSession(&chucky.SessionOptions{
+    BaseOptions: chucky.BaseOptions{
+        Model:        chucky.ModelClaudeSonnet,
+        SystemPrompt: "You are a helpful assistant.",
+        MaxTurns:     10,
+    },
+})
+defer session.Close()
+```
+
+## Methods
+
+### Send()
+
+Send a message to Claude. Auto-connects if needed.
+
+```go
+func (s *Session) Send(ctx context.Context, message string) error
+```
+
+#### Example
+
+```go
+ctx := context.Background()
+
+if err := session.Send(ctx, "What is the capital of France?"); err != nil {
+    log.Fatal(err)
+}
+
+// Use Stream() to receive the response
+for msg := range session.Stream(ctx) {
+    // handle messages
+}
+```
+
+---
+
+### Stream()
+
+Stream the response after sending a message. Returns a channel that yields incoming messages.
+
+```go
+func (s *Session) Stream(ctx context.Context) <-chan IncomingMessage
+```
+
+#### Message Types
+
+| Type | Description |
+|------|-------------|
+| `*SDKSystemMessage` | System initialization with session info |
+| `*SDKAssistantMessage` | Claude's response with content blocks |
+| `*SDKResultMessage` | Final result with cost and usage info |
+| `*SDKPartialAssistantMessage` | Partial streaming events |
+| `*ControlEnvelope` | Control messages |
+| `*ErrorEnvelope` | Error messages |
+
+#### Example
+
+```go
+if err := session.Send(ctx, "Tell me a story"); err != nil {
+    log.Fatal(err)
+}
+
+for msg := range session.Stream(ctx) {
+    switch m := msg.(type) {
+    case *chucky.SDKSystemMessage:
+        fmt.Println("Session:", m.SessionID)
+        fmt.Println("Model:", m.Data)
+    case *chucky.SDKAssistantMessage:
+        text := chucky.GetAssistantText(m)
+        if text != "" {
+            fmt.Print(text)
+        }
+    case *chucky.SDKResultMessage:
+        fmt.Println("\nResult:", m.Result)
+        fmt.Printf("Cost: $%.6f\n", m.TotalCostUsd)
+        fmt.Printf("Turns: %d\n", m.NumTurns)
+    case *chucky.ErrorEnvelope:
+        fmt.Println("Error:", m.Payload.Message)
+    }
+}
+```
+
+---
+
+### Receive()
+
+Alias for `Stream()`.
+
+```go
+func (s *Session) Receive(ctx context.Context) <-chan IncomingMessage
+```
+
+---
+
+### Connect()
+
+Manually connect the session. Called automatically by `Send()`.
+
+```go
+func (s *Session) Connect(ctx context.Context) error
+```
+
+---
+
+### Close()
+
+Close the session and release resources.
+
+```go
+func (s *Session) Close()
+```
+
+#### Example
+
+```go
+session := client.CreateSession(&chucky.SessionOptions{})
+
+// Use defer for cleanup
+defer session.Close()
+
+if err := session.Send(ctx, "Hello"); err != nil {
+    log.Fatal(err)
+}
+
+for msg := range session.Stream(ctx) {
+    // handle messages
+}
+```
+
+---
+
+### On()
+
+Register event handlers.
+
+```go
+func (s *Session) On(handlers SessionEventHandlers) *Session
+```
+
+#### SessionEventHandlers
+
+| Handler | Parameters | Description |
+|---------|------------|-------------|
+| `OnMessage` | `(msg IncomingMessage)` | Message received |
+| `OnError` | `(err error)` | Error occurred |
+| `OnClose` | `()` | Session closed |
+
+#### Example
+
+```go
+session.On(chucky.SessionEventHandlers{
+    OnMessage: func(msg chucky.IncomingMessage) {
+        fmt.Printf("Message type: %T\n", msg)
+    },
+    OnError: func(err error) {
+        fmt.Println("Error:", err)
+    },
+})
+```
+
+---
+
+### ID()
+
+Get the session ID.
+
+```go
+func (s *Session) ID() string
+```
+
+---
+
+### State()
+
+Get the current session state.
+
+```go
+func (s *Session) State() SessionState
+```
+
+#### SessionState Values
+
+| State | Description |
+|-------|-------------|
+| `SessionStateIdle` | Created, not connected |
+| `SessionStateInitializing` | Connecting |
+| `SessionStateReady` | Ready for messages |
+| `SessionStateProcessing` | Waiting for response |
+| `SessionStateWaitingTool` | Waiting for tool result |
+| `SessionStateCompleted` | Session finished |
+| `SessionStateError` | Error state |
+
+## Helper Functions
+
+### GetAssistantText()
+
+Extract text content from an assistant message.
+
+```go
+func GetAssistantText(msg *SDKAssistantMessage) string
+```
+
+#### Example
+
+```go
+for msg := range session.Stream(ctx) {
+    if m, ok := msg.(*chucky.SDKAssistantMessage); ok {
+        text := chucky.GetAssistantText(m)
+        fmt.Println(text)
+    }
+}
+```
+
+---
+
+### GetResultText()
+
+Extract result text from a result message.
+
+```go
+func GetResultText(msg *SDKResultMessage) string
+```
+
+## Usage Patterns
+
+### Basic Conversation
+
+```go
+client := chucky.NewClient(chucky.ClientOptions{Token: token})
+defer client.Close()
+
+session := client.CreateSession(&chucky.SessionOptions{
+    BaseOptions: chucky.BaseOptions{
+        Model: chucky.ModelClaudeSonnet,
+    },
+})
+defer session.Close()
+
+ctx := context.Background()
+
+// First turn
+session.Send(ctx, "Hi, my name is Alice")
+for msg := range session.Stream(ctx) {
+    if m, ok := msg.(*chucky.SDKAssistantMessage); ok {
+        fmt.Println(chucky.GetAssistantText(m))
+    }
+    if _, ok := msg.(*chucky.SDKResultMessage); ok {
+        break
+    }
+}
+
+// Second turn (Claude remembers context)
+session.Send(ctx, "What is my name?")
+for msg := range session.Stream(ctx) {
+    if m, ok := msg.(*chucky.SDKAssistantMessage); ok {
+        fmt.Println(chucky.GetAssistantText(m)) // "Your name is Alice."
+    }
+    if _, ok := msg.(*chucky.SDKResultMessage); ok {
+        break
+    }
+}
+```
+
+### With Timeout
+
+```go
+ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+defer cancel()
+
+if err := session.Send(ctx, "Complex query..."); err != nil {
+    if errors.Is(err, context.DeadlineExceeded) {
+        fmt.Println("Request timed out")
+    }
+    return
+}
+
+for msg := range session.Stream(ctx) {
+    // handle messages
+}
+```
+
+### Error Handling
+
+```go
+if err := session.Send(ctx, "Hello"); err != nil {
+    switch {
+    case errors.As(err, &chucky.BudgetExceededError{}):
+        fmt.Println("Budget exceeded")
+    case errors.As(err, &chucky.AuthenticationError{}):
+        fmt.Println("Authentication failed")
+    default:
+        fmt.Println("Error:", err)
+    }
+    return
+}
+
+for msg := range session.Stream(ctx) {
+    if e, ok := msg.(*chucky.ErrorEnvelope); ok {
+        fmt.Println("Server error:", e.Payload.Message)
+        break
+    }
+    if r, ok := msg.(*chucky.SDKResultMessage); ok {
+        if r.IsError {
+            fmt.Println("Result error:", r.Errors)
+        } else {
+            fmt.Println("Success:", r.Result)
+        }
+        break
+    }
+}
+```

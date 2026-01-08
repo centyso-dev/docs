@@ -1,0 +1,351 @@
+---
+title: Tools
+description: Go SDK tools and MCP servers reference
+---
+
+# Tools
+
+Define custom tools that Claude can use during conversations. Tools can execute locally in your Go application (client-side) or on the server.
+
+## Creating Tools
+
+### Tool()
+
+Create a tool with a handler for client-side execution.
+
+```go
+func Tool(name, description string, schema ToolInputSchema, handler ToolHandler) ToolDefinition
+```
+
+#### Example
+
+```go
+calculatorTool := chucky.Tool(
+    "calculator",
+    "Perform arithmetic calculations",
+    chucky.NewSchema().
+        Enum("operation", "Operation to perform", "add", "subtract", "multiply", "divide").
+        Number("a", "First operand").
+        Number("b", "Second operand").
+        Required("operation", "a", "b").
+        Build(),
+    func(ctx context.Context, input map[string]interface{}) (*chucky.ToolResult, error) {
+        operation := input["operation"].(string)
+        a := input["a"].(float64)
+        b := input["b"].(float64)
+
+        var result float64
+        switch operation {
+        case "add":
+            result = a + b
+        case "multiply":
+            result = a * b
+        // ... other operations
+        }
+
+        return chucky.TextResult(fmt.Sprintf("%.2f", result)), nil
+    },
+)
+```
+
+---
+
+### ServerTool()
+
+Create a tool for server-side execution (no local handler).
+
+```go
+func ServerTool(name, description string, schema ToolInputSchema, handler ToolHandler) ToolDefinition
+```
+
+---
+
+### BrowserTool()
+
+Create a tool marked for browser/client-side execution.
+
+```go
+func BrowserTool(name, description string, schema ToolInputSchema, handler ToolHandler) ToolDefinition
+```
+
+## Schema Builder
+
+Use the fluent schema builder to define tool input schemas.
+
+### NewSchema()
+
+Create a new schema builder.
+
+```go
+schema := chucky.NewSchema().
+    String("name", "User's name").
+    Number("age", "User's age").
+    Boolean("active", "Is user active").
+    Enum("role", "User role", "admin", "user", "guest").
+    Required("name", "role").
+    Build()
+```
+
+### Schema Methods
+
+| Method | Description |
+|--------|-------------|
+| `String(name, description)` | Add string property |
+| `Number(name, description)` | Add number property |
+| `Integer(name, description)` | Add integer property |
+| `Boolean(name, description)` | Add boolean property |
+| `Enum(name, description, values...)` | Add enum property |
+| `Array(name, description, items)` | Add array property |
+| `Property(name, prop)` | Add custom property |
+| `Required(names...)` | Mark properties as required |
+| `Build()` | Return the completed schema |
+
+## Tool Results
+
+### TextResult()
+
+Create a text result.
+
+```go
+return chucky.TextResult("Operation completed successfully")
+```
+
+### ErrorResult()
+
+Create an error result.
+
+```go
+return chucky.ErrorResult("Invalid input: division by zero")
+```
+
+### ImageResult()
+
+Create an image result.
+
+```go
+return chucky.ImageResult(base64Data, "image/png")
+```
+
+### ResourceResult()
+
+Create a resource result.
+
+```go
+return chucky.ResourceResult(
+    "file:///path/to/file",
+    chucky.WithMimeType("application/json"),
+    chucky.WithText(jsonContent),
+)
+```
+
+## MCP Servers
+
+### Client-Side MCP Server
+
+Create an MCP server with tools that execute locally.
+
+```go
+mcpServer := chucky.NewMcpServer("my-server").
+    Version("1.0.0").
+    Add(calculatorTool).
+    Add(weatherTool).
+    Build()
+
+session := client.CreateSession(&chucky.SessionOptions{
+    BaseOptions: chucky.BaseOptions{
+        Model:      chucky.ModelClaudeSonnet,
+        McpServers: []chucky.McpServerDefinition{mcpServer},
+    },
+})
+```
+
+### Stdio MCP Server
+
+Connect to an external MCP server via stdio.
+
+```go
+stdioServer := chucky.StdioServer(
+    "filesystem",
+    "npx",
+    "-y", "@modelcontextprotocol/server-filesystem", "/workspace",
+)
+
+session := client.CreateSession(&chucky.SessionOptions{
+    BaseOptions: chucky.BaseOptions{
+        McpServers: []chucky.McpServerDefinition{stdioServer},
+    },
+})
+```
+
+### SSE MCP Server
+
+Connect to an MCP server via Server-Sent Events.
+
+```go
+sseServer := chucky.SSEServer(
+    "remote-tools",
+    "https://mcp.example.com/sse",
+    map[string]string{"Authorization": "Bearer token"},
+)
+```
+
+### HTTP MCP Server
+
+Connect to an MCP server via HTTP.
+
+```go
+httpServer := chucky.HTTPServer(
+    "api-tools",
+    "https://mcp.example.com/api",
+)
+```
+
+## Complete Example
+
+```go
+package main
+
+import (
+    "context"
+    "fmt"
+    "log"
+    "time"
+
+    chucky "github.com/chucky-cloud/chucky-sdk-go"
+)
+
+func main() {
+    token, _ := chucky.CreateToken(chucky.CreateTokenOptions{
+        UserID:    "user-123",
+        ProjectID: "your-project-id",
+        Secret:    "hk_live_your_secret",
+        Budget: chucky.CreateBudget(chucky.CreateBudgetOptions{
+            AIDollars:    1.0,
+            ComputeHours: 0.5,
+            Window:       chucky.BudgetWindowHour,
+        }),
+    })
+
+    // Define tools
+    greetTool := chucky.Tool(
+        "greet",
+        "Greet a user by name",
+        chucky.NewSchema().
+            String("name", "Name to greet").
+            Required("name").
+            Build(),
+        func(ctx context.Context, input map[string]interface{}) (*chucky.ToolResult, error) {
+            name := input["name"].(string)
+            fmt.Printf("[Tool] Greeting %s\n", name)
+            return chucky.TextResult(fmt.Sprintf("Hello, %s! Nice to meet you.", name)), nil
+        },
+    )
+
+    calculatorTool := chucky.Tool(
+        "calculate",
+        "Perform math calculations",
+        chucky.NewSchema().
+            Enum("op", "Operation", "add", "subtract", "multiply", "divide").
+            Number("a", "First number").
+            Number("b", "Second number").
+            Required("op", "a", "b").
+            Build(),
+        func(ctx context.Context, input map[string]interface{}) (*chucky.ToolResult, error) {
+            op := input["op"].(string)
+            a := input["a"].(float64)
+            b := input["b"].(float64)
+
+            var result float64
+            switch op {
+            case "add":
+                result = a + b
+            case "subtract":
+                result = a - b
+            case "multiply":
+                result = a * b
+            case "divide":
+                if b == 0 {
+                    return chucky.ErrorResult("Cannot divide by zero"), nil
+                }
+                result = a / b
+            }
+
+            fmt.Printf("[Tool] %s(%g, %g) = %g\n", op, a, b, result)
+            return chucky.TextResult(fmt.Sprintf("Result: %g", result)), nil
+        },
+    )
+
+    // Create MCP server with tools
+    mcpServer := chucky.NewMcpServer("my-tools").
+        Version("1.0.0").
+        Add(greetTool).
+        Add(calculatorTool).
+        Build()
+
+    // Create client and session
+    client := chucky.NewClient(chucky.ClientOptions{
+        Token: token,
+        Debug: true,
+    })
+    defer client.Close()
+
+    session := client.CreateSession(&chucky.SessionOptions{
+        BaseOptions: chucky.BaseOptions{
+            Model:      chucky.ModelClaudeSonnet,
+            MaxTurns:   10,
+            McpServers: []chucky.McpServerDefinition{mcpServer},
+        },
+    })
+    defer session.Close()
+
+    ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+    defer cancel()
+
+    // Send message that triggers tool use
+    if err := session.Send(ctx, "Use the calculator to multiply 15 by 7, then greet 'World'"); err != nil {
+        log.Fatal(err)
+    }
+
+    // Stream response
+    for msg := range session.Stream(ctx) {
+        switch m := msg.(type) {
+        case *chucky.SDKAssistantMessage:
+            text := chucky.GetAssistantText(m)
+            if text != "" {
+                fmt.Println("Assistant:", text)
+            }
+        case *chucky.SDKResultMessage:
+            fmt.Println("\n=== Result ===")
+            fmt.Println("Answer:", m.Result)
+            fmt.Printf("Cost: $%.6f\n", m.TotalCostUsd)
+        }
+    }
+}
+```
+
+## Tool Handler Signature
+
+```go
+type ToolHandler func(ctx context.Context, input map[string]any) (*ToolResult, error)
+```
+
+The handler receives:
+- `ctx`: Context for cancellation and deadlines
+- `input`: Parsed input matching your schema
+
+Return:
+- `*ToolResult`: The result to send back to Claude
+- `error`: Any error that occurred (will be sent as error result)
+
+## SimpleHandler()
+
+Wrap a simple function as a tool handler.
+
+```go
+handler := chucky.SimpleHandler(func(input map[string]any) (string, error) {
+    name := input["name"].(string)
+    return fmt.Sprintf("Hello, %s!", name), nil
+})
+
+tool := chucky.Tool("greet", "Greet someone", schema, handler)
+```

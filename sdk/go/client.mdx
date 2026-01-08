@@ -1,0 +1,249 @@
+---
+title: Client
+description: Go SDK client reference
+---
+
+# Client
+
+The main client for interacting with Chucky in Go.
+
+## Installation
+
+```bash
+go get github.com/chucky-cloud/chucky-sdk-go
+```
+
+## Import
+
+```go
+import chucky "github.com/chucky-cloud/chucky-sdk-go"
+```
+
+## Creating a Client
+
+```go
+client := chucky.NewClient(chucky.ClientOptions{
+    Token: "your-jwt-token",
+    Debug: true,
+})
+defer client.Close()
+```
+
+### ClientOptions
+
+| Field | Type | Required | Default | Description |
+|-------|------|----------|---------|-------------|
+| `Token` | `string` | Yes | - | JWT authentication token |
+| `BaseURL` | `string` | No | `wss://conjure.chucky.cloud/ws` | WebSocket server URL |
+| `Debug` | `bool` | No | `false` | Enable debug logging |
+| `Timeout` | `time.Duration` | No | `60s` | Connection timeout |
+| `KeepAliveInterval` | `time.Duration` | No | `5m` | Keep-alive ping interval |
+
+## Methods
+
+### CreateSession()
+
+Create a new conversation session.
+
+```go
+func (c *Client) CreateSession(opts *SessionOptions) *Session
+```
+
+#### SessionOptions
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `Model` | `Model` | Claude model to use |
+| `SystemPrompt` | `any` | System prompt (string or preset) |
+| `MaxTurns` | `int` | Max conversation turns |
+| `MaxBudgetUsd` | `float64` | Budget limit |
+| `Tools` | `any` | Available tools |
+| `McpServers` | `[]McpServerDefinition` | MCP servers with tools |
+| `OutputFormat` | `*OutputFormat` | Structured output format |
+| `SessionID` | `string` | Resume existing session |
+| `ForkSession` | `bool` | Fork from session ID |
+
+#### Example
+
+```go
+session := client.CreateSession(&chucky.SessionOptions{
+    BaseOptions: chucky.BaseOptions{
+        Model:    chucky.ModelClaudeSonnet,
+        MaxTurns: 10,
+    },
+})
+defer session.Close()
+```
+
+---
+
+### On()
+
+Register event handlers.
+
+```go
+func (c *Client) On(handlers ClientEventHandlers) *Client
+```
+
+#### ClientEventHandlers
+
+| Handler | Parameters | Description |
+|---------|------------|-------------|
+| `OnConnect` | `()` | WebSocket connected |
+| `OnDisconnect` | `(reason string)` | WebSocket disconnected |
+| `OnSessionStart` | `(sessionID string)` | Session started |
+| `OnSessionEnd` | `(sessionID string)` | Session ended |
+| `OnError` | `(err error)` | Error occurred |
+
+#### Example
+
+```go
+client.On(chucky.ClientEventHandlers{
+    OnConnect: func() {
+        fmt.Println("Connected!")
+    },
+    OnError: func(err error) {
+        fmt.Println("Error:", err)
+    },
+})
+```
+
+---
+
+### Close()
+
+Close the client and all active sessions.
+
+```go
+func (c *Client) Close()
+```
+
+## Token Management
+
+### CreateToken()
+
+Create a JWT token for authentication.
+
+```go
+func CreateToken(opts CreateTokenOptions) (string, error)
+```
+
+#### CreateTokenOptions
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `UserID` | `string` | Yes | User identifier |
+| `ProjectID` | `string` | Yes | Project ID |
+| `Secret` | `string` | Yes | HMAC secret key |
+| `Budget` | `TokenBudget` | No | Budget limits |
+| `ExpiresIn` | `int64` | No | Token TTL in seconds (default: 3600) |
+| `Permissions` | `*TokenPermissions` | No | Permission restrictions |
+
+#### Example
+
+```go
+token, err := chucky.CreateToken(chucky.CreateTokenOptions{
+    UserID:    "user-123",
+    ProjectID: "your-project-id",
+    Secret:    "hk_live_your_secret_key",
+    Budget: chucky.CreateBudget(chucky.CreateBudgetOptions{
+        AIDollars:    5.0,
+        ComputeHours: 1.0,
+        Window:       chucky.BudgetWindowDay,
+    }),
+})
+if err != nil {
+    log.Fatal(err)
+}
+```
+
+---
+
+### CreateBudget()
+
+Create a budget from human-readable values.
+
+```go
+func CreateBudget(opts CreateBudgetOptions) TokenBudget
+```
+
+#### CreateBudgetOptions
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `AIDollars` | `float64` | AI budget in dollars (converted to microdollars) |
+| `ComputeHours` | `float64` | Compute budget in hours (converted to seconds) |
+| `Window` | `BudgetWindow` | Budget window (`hour`, `day`, `week`, `month`) |
+| `WindowStart` | `time.Time` | Window start time |
+
+## Complete Example
+
+```go
+package main
+
+import (
+    "context"
+    "fmt"
+    "log"
+    "time"
+
+    chucky "github.com/chucky-cloud/chucky-sdk-go"
+)
+
+func main() {
+    // Create token
+    token, err := chucky.CreateToken(chucky.CreateTokenOptions{
+        UserID:    "user-123",
+        ProjectID: "your-project-id",
+        Secret:    "hk_live_your_secret_key",
+        Budget: chucky.CreateBudget(chucky.CreateBudgetOptions{
+            AIDollars:    1.0,
+            ComputeHours: 0.5,
+            Window:       chucky.BudgetWindowHour,
+            WindowStart:  time.Now(),
+        }),
+    })
+    if err != nil {
+        log.Fatal(err)
+    }
+
+    // Create client
+    client := chucky.NewClient(chucky.ClientOptions{
+        Token: token,
+        Debug: true,
+    })
+    defer client.Close()
+
+    // Create session
+    session := client.CreateSession(&chucky.SessionOptions{
+        BaseOptions: chucky.BaseOptions{
+            Model:    chucky.ModelClaudeSonnet,
+            MaxTurns: 5,
+        },
+    })
+
+    ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+    defer cancel()
+
+    // Send message
+    if err := session.Send(ctx, "What is 2 + 2?"); err != nil {
+        log.Fatal(err)
+    }
+
+    // Stream response
+    for msg := range session.Stream(ctx) {
+        switch m := msg.(type) {
+        case *chucky.SDKAssistantMessage:
+            text := chucky.GetAssistantText(m)
+            if text != "" {
+                fmt.Println("Assistant:", text)
+            }
+        case *chucky.SDKResultMessage:
+            fmt.Println("Result:", m.Result)
+            fmt.Printf("Cost: $%.6f\n", m.TotalCostUsd)
+        }
+    }
+
+    session.Close()
+}
+```

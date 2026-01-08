@@ -11,7 +11,7 @@ This guide will help you integrate Claude into your application using the Chucky
 
 - A Chucky account with a project created at [app.chucky.cloud](https://app.chucky.cloud)
 - Your **Project ID** and **HMAC Secret** (found in project settings)
-- Node.js 18+ or Python 3.10+
+- Node.js 18+, Python 3.10+, or Go 1.21+
 
 ## Installation
 
@@ -34,6 +34,10 @@ pip install chucky-sdk
 
 ```bash poetry
 poetry add chucky-sdk
+```
+
+```bash go
+go get github.com/chucky-cloud/chucky-sdk-go
 ```
 </CodeGroup>
 
@@ -82,6 +86,31 @@ token = create_token(
 # Return token to client
 return {'token': token}
 ```
+
+```go Go (Server)
+import (
+    "os"
+    "time"
+    chucky "github.com/chucky-cloud/chucky-sdk-go"
+)
+
+// Create a token for a user
+token, err := chucky.CreateToken(chucky.CreateTokenOptions{
+    UserID:    "user-123",
+    ProjectID: os.Getenv("CHUCKY_PROJECT_ID"),  // From portal
+    Secret:    os.Getenv("CHUCKY_HMAC_SECRET"), // From portal
+    ExpiresIn: 3600,
+    Budget: chucky.CreateBudget(chucky.CreateBudgetOptions{
+        AIDollars:    1.00,
+        ComputeHours: 1,
+        Window:       chucky.BudgetWindowDay,
+        WindowStart:  time.Now(),
+    }),
+})
+
+// Return token to client
+return map[string]string{"token": token}
+```
 </CodeGroup>
 
 ## Step 2: Use the SDK (Client-Side)
@@ -118,6 +147,35 @@ result = await client.prompt('What is the capital of France?')
 
 print(result.result)  # "The capital of France is Paris."
 print(result.total_cost_usd)  # 0.0012
+```
+
+```go Go
+import (
+    "context"
+    "fmt"
+    chucky "github.com/chucky-cloud/chucky-sdk-go"
+)
+
+client := chucky.NewClient(chucky.ClientOptions{Token: token})
+defer client.Close()
+
+session := client.CreateSession(&chucky.SessionOptions{
+    BaseOptions: chucky.BaseOptions{
+        Model:    chucky.ModelClaudeSonnet,
+        MaxTurns: 1,
+    },
+})
+defer session.Close()
+
+ctx := context.Background()
+session.Send(ctx, "What is the capital of France?")
+
+for msg := range session.Stream(ctx) {
+    if r, ok := msg.(*chucky.SDKResultMessage); ok {
+        fmt.Println(r.Result)       // "The capital of France is Paris."
+        fmt.Println(r.TotalCostUsd) // 0.0012
+    }
+}
 ```
 </CodeGroup>
 
@@ -167,6 +225,43 @@ async with client.session(system_prompt='You are a helpful geography tutor.') as
     # Follow-up (Claude remembers context)
     r2 = await session.send('What about Germany?')
     print(r2.result)  # "The capital of Germany is Berlin."
+```
+
+```go Go
+client := chucky.NewClient(chucky.ClientOptions{Token: token})
+defer client.Close()
+
+session := client.CreateSession(&chucky.SessionOptions{
+    BaseOptions: chucky.BaseOptions{
+        Model:        chucky.ModelClaudeSonnet,
+        SystemPrompt: "You are a helpful geography tutor.",
+    },
+})
+defer session.Close()
+
+ctx := context.Background()
+
+// First message
+session.Send(ctx, "What is the capital of France?")
+for msg := range session.Stream(ctx) {
+    if m, ok := msg.(*chucky.SDKAssistantMessage); ok {
+        fmt.Println(chucky.GetAssistantText(m)) // "The capital of France is Paris."
+    }
+    if _, ok := msg.(*chucky.SDKResultMessage); ok {
+        break
+    }
+}
+
+// Follow-up (Claude remembers context)
+session.Send(ctx, "What about Germany?")
+for msg := range session.Stream(ctx) {
+    if m, ok := msg.(*chucky.SDKAssistantMessage); ok {
+        fmt.Println(chucky.GetAssistantText(m)) // "The capital of Germany is Berlin."
+    }
+    if _, ok := msg.(*chucky.SDKResultMessage); ok {
+        break
+    }
+}
 ```
 </CodeGroup>
 
@@ -259,6 +354,44 @@ result = await client.prompt(
     'What is the weather in Tokyo?',
     tools=[get_weather],
 )
+```
+
+```go Go
+// Define a tool
+weatherTool := chucky.Tool(
+    "get_weather",
+    "Get current weather for a city",
+    chucky.NewSchema().
+        String("city", "City name").
+        Required("city").
+        Build(),
+    func(ctx context.Context, input map[string]interface{}) (*chucky.ToolResult, error) {
+        city := input["city"].(string)
+        weather := fetchWeather(city) // Your implementation
+        return chucky.TextResult(fmt.Sprintf("%s: %s", city, weather)), nil
+    },
+)
+
+// Create MCP server with tools
+mcpServer := chucky.NewMcpServer("weather").
+    Add(weatherTool).
+    Build()
+
+// Use tools in a session
+client := chucky.NewClient(chucky.ClientOptions{Token: token})
+session := client.CreateSession(&chucky.SessionOptions{
+    BaseOptions: chucky.BaseOptions{
+        McpServers: []chucky.McpServerDefinition{mcpServer},
+    },
+})
+
+session.Send(ctx, "What is the weather in Tokyo?")
+for msg := range session.Stream(ctx) {
+    if m, ok := msg.(*chucky.SDKAssistantMessage); ok {
+        fmt.Println(chucky.GetAssistantText(m))
+    }
+}
+// Claude will call get_weather, then respond with the result
 ```
 </CodeGroup>
 
