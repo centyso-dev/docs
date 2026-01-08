@@ -1,0 +1,302 @@
+---
+title: 'Tools'
+description: 'PHP SDK tools and MCP servers reference'
+---
+
+## Creating Tools
+
+Define tools that execute on the client side:
+
+```php
+<?php
+
+use function ChuckyCloud\Sdk\Tools\tool;
+use function ChuckyCloud\Sdk\Tools\textResult;
+use function ChuckyCloud\Sdk\Tools\schema;
+
+$calculatorTool = tool(
+    name: 'calculator',
+    description: 'Perform arithmetic calculations',
+    schema: schema()
+        ->enum('operation', 'Operation', 'add', 'subtract', 'multiply', 'divide')
+        ->number('a', 'First operand')
+        ->number('b', 'Second operand')
+        ->required('operation', 'a', 'b')
+        ->build(),
+    handler: function (array $input) {
+        $op = $input['operation'];
+        $a = $input['a'];
+        $b = $input['b'];
+
+        $result = match ($op) {
+            'add' => $a + $b,
+            'subtract' => $a - $b,
+            'multiply' => $a * $b,
+            'divide' => $b !== 0 ? $a / $b : 'Error: Division by zero',
+        };
+
+        return textResult("Result: $result");
+    }
+);
+```
+
+## Schema Builder
+
+The fluent schema builder creates JSON Schema for tool inputs:
+
+```php
+use function ChuckyCloud\Sdk\Tools\schema;
+use ChuckyCloud\Sdk\Tools\SchemaProperty;
+
+$schema = schema()
+    ->string('name', 'User name')
+    ->number('age', 'User age')
+    ->integer('count', 'Item count')
+    ->boolean('active', 'Is active')
+    ->enum('role', 'User role', 'admin', 'user', 'guest')
+    ->array('tags', 'List of tags', new SchemaProperty('string'))
+    ->required('name', 'role')
+    ->build();
+```
+
+### Schema Methods
+
+| Method | Description |
+|--------|-------------|
+| `string($name, $description)` | String property |
+| `number($name, $description)` | Number property (float) |
+| `integer($name, $description)` | Integer property |
+| `boolean($name, $description)` | Boolean property |
+| `enum($name, $description, ...$values)` | Enum (string with allowed values) |
+| `array($name, $description, $items)` | Array of items |
+| `property($name, $prop)` | Custom property definition |
+| `required(...$names)` | Mark properties as required |
+| `build()` | Build the schema |
+
+## Tool Results
+
+### Text Result
+
+```php
+use function ChuckyCloud\Sdk\Tools\textResult;
+
+return textResult('Operation completed successfully');
+```
+
+### Error Result
+
+```php
+use function ChuckyCloud\Sdk\Tools\errorResult;
+
+return errorResult('Something went wrong');
+```
+
+### Image Result
+
+```php
+use function ChuckyCloud\Sdk\Tools\imageResult;
+
+$base64 = base64_encode(file_get_contents('image.png'));
+return imageResult($base64, 'image/png');
+```
+
+### Resource Result
+
+```php
+use function ChuckyCloud\Sdk\Tools\resourceResult;
+
+return resourceResult('file:///path/to/file.txt', 'text/plain', $content);
+```
+
+## MCP Servers
+
+### Client Tools Server
+
+Create an MCP server with client-side tools:
+
+```php
+use function ChuckyCloud\Sdk\Tools\mcpServer;
+
+$server = mcpServer('my-tools')
+    ->version('1.0.0')
+    ->addTool($calculatorTool)
+    ->addTool($fetchTool)
+    ->build();
+```
+
+### Stdio Server
+
+Connect to an MCP server via stdio:
+
+```php
+use function ChuckyCloud\Sdk\Tools\stdioServer;
+
+$server = stdioServer(
+    'filesystem',
+    'npx',
+    '-y',
+    '@modelcontextprotocol/server-filesystem',
+    '/workspace'
+);
+```
+
+### SSE Server
+
+Connect to an MCP server via Server-Sent Events:
+
+```php
+use function ChuckyCloud\Sdk\Tools\sseServer;
+
+$server = sseServer(
+    'remote-server',
+    'https://mcp.example.com/sse',
+    ['Authorization' => 'Bearer token']  // optional headers
+);
+```
+
+### HTTP Server
+
+Connect to an MCP server via HTTP:
+
+```php
+use function ChuckyCloud\Sdk\Tools\httpServer;
+
+$server = httpServer(
+    'api-server',
+    'https://mcp.example.com/api',
+    ['X-API-Key' => 'secret']
+);
+```
+
+## Using Tools in Sessions
+
+```php
+use ChuckyCloud\Sdk\Types\SessionOptions;
+use ChuckyCloud\Sdk\Types\Model;
+
+$session = $client->createSession(new SessionOptions(
+    model: Model::CLAUDE_SONNET,
+    maxTurns: 10,
+    mcpServers: [$server],
+));
+```
+
+## Full Example
+
+```php
+<?php
+
+require_once __DIR__ . '/vendor/autoload.php';
+
+use ChuckyCloud\Sdk\Client\ChuckyClient;
+use ChuckyCloud\Sdk\Types\ClientOptions;
+use ChuckyCloud\Sdk\Types\SessionOptions;
+use ChuckyCloud\Sdk\Types\Model;
+use ChuckyCloud\Sdk\Types\BudgetWindow;
+use ChuckyCloud\Sdk\Types\AssistantMessage;
+use ChuckyCloud\Sdk\Types\ResultMessage;
+use ChuckyCloud\Sdk\Utils\CreateBudgetOptions;
+use ChuckyCloud\Sdk\Utils\CreateTokenOptions;
+
+use function ChuckyCloud\Sdk\Utils\createBudget;
+use function ChuckyCloud\Sdk\Utils\createToken;
+use function ChuckyCloud\Sdk\Tools\tool;
+use function ChuckyCloud\Sdk\Tools\textResult;
+use function ChuckyCloud\Sdk\Tools\schema;
+use function ChuckyCloud\Sdk\Tools\mcpServer;
+
+// Create token
+$token = createToken(new CreateTokenOptions(
+    userId: 'user-123',
+    projectId: getenv('CHUCKY_PROJECT_ID'),
+    secret: getenv('CHUCKY_HMAC_SECRET'),
+    budget: createBudget(new CreateBudgetOptions(
+        aiDollars: 1.0,
+        window: BudgetWindow::HOUR,
+    )),
+));
+
+// Define calculator tool
+$calculatorTool = tool(
+    name: 'calculator',
+    description: 'Perform arithmetic calculations',
+    schema: schema()
+        ->enum('operation', 'Operation', 'add', 'subtract', 'multiply', 'divide')
+        ->number('a', 'First operand')
+        ->number('b', 'Second operand')
+        ->required('operation', 'a', 'b')
+        ->build(),
+    handler: function (array $input) {
+        $op = $input['operation'];
+        $a = $input['a'];
+        $b = $input['b'];
+
+        $result = match ($op) {
+            'add' => $a + $b,
+            'subtract' => $a - $b,
+            'multiply' => $a * $b,
+            'divide' => $b !== 0 ? $a / $b : 'Error: Division by zero',
+        };
+
+        echo "[Tool] calculator({$op}, {$a}, {$b}) = {$result}\n";
+        return textResult("Result: $result");
+    }
+);
+
+// Create MCP server
+$mcpServer = mcpServer('calculator-server')
+    ->addTool($calculatorTool)
+    ->build();
+
+// Create client
+$client = new ChuckyClient(new ClientOptions(
+    token: $token,
+    debug: true,
+));
+
+// Create session with tools
+$session = $client->createSession(new SessionOptions(
+    model: Model::CLAUDE_SONNET,
+    maxTurns: 5,
+    mcpServers: [$mcpServer],
+));
+
+// Connect and send message
+$session->connect()->then(function () use ($session, $client) {
+    $session->send('What is 15 * 7? Use the calculator tool.')->then(function () use ($session, $client) {
+        $receiveNext = function () use (&$receiveNext, $session, $client) {
+            $session->receive()->then(function ($msg) use (&$receiveNext, $session, $client) {
+                if ($msg instanceof AssistantMessage) {
+                    $text = $msg->getText();
+                    if ($text) {
+                        echo "[Assistant] {$text}\n";
+                    }
+                }
+
+                if ($msg instanceof ResultMessage) {
+                    echo "\nResult: {$msg->result}\n";
+                    echo "Cost: \${$msg->totalCostUsd}\n";
+                    $session->close();
+                    $client->stop();
+                    return;
+                }
+
+                $receiveNext();
+            });
+        };
+        $receiveNext();
+    });
+});
+
+$client->run();
+```
+
+## Tool Execution Flow
+
+1. Claude decides to use a tool
+2. Server sends `tool_call` message to client
+3. Client executes the tool handler locally
+4. Client sends `tool_result` back to server
+5. Claude processes the result and continues
+
+The `executeIn: "client"` flag is automatically set for tools with handlers, ensuring they execute locally.

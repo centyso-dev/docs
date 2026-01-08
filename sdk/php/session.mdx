@@ -1,0 +1,299 @@
+---
+title: 'Session'
+description: 'PHP SDK session reference'
+---
+
+## Creating a Session
+
+```php
+<?php
+
+use ChuckyCloud\Sdk\Types\SessionOptions;
+use ChuckyCloud\Sdk\Types\Model;
+
+$session = $client->createSession(new SessionOptions(
+    model: Model::CLAUDE_SONNET,
+    maxTurns: 10,
+    systemPrompt: 'You are a helpful assistant.',
+));
+```
+
+## SessionOptions
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `model` | `Model` | `CLAUDE_SONNET` | Model to use |
+| `fallbackModel` | `Model\|null` | `null` | Fallback model |
+| `systemPrompt` | `string\|null` | `null` | System prompt |
+| `maxTurns` | `int\|null` | `null` | Maximum conversation turns |
+| `maxBudgetUsd` | `float\|null` | `null` | Maximum budget in USD |
+| `maxThinkingTokens` | `int\|null` | `null` | Maximum thinking tokens |
+| `tools` | `array\|null` | `null` | Tool definitions |
+| `mcpServers` | `array\|null` | `null` | MCP server definitions |
+| `permissionMode` | `PermissionMode` | `DEFAULT` | Permission mode |
+| `outputFormat` | `string\|null` | `null` | Output format |
+| `includePartialMessages` | `bool` | `false` | Include partial messages |
+| `env` | `array\|null` | `null` | Environment variables |
+
+## Available Models
+
+```php
+use ChuckyCloud\Sdk\Types\Model;
+
+Model::CLAUDE_SONNET    // claude-sonnet-4-5-20250929
+Model::CLAUDE_HAIKU     // claude-haiku-4-5-20251001
+Model::CLAUDE_OPUS      // claude-opus-4-20250514
+```
+
+## Methods
+
+### connect
+
+Connect to the server and initialize the session.
+
+```php
+$session->connect()->then(function () {
+    echo "Connected!\n";
+});
+```
+
+### send
+
+Send a message to Claude.
+
+```php
+$session->send('What is 2 + 2?')->then(function () {
+    echo "Message sent!\n";
+});
+```
+
+### receive
+
+Receive the next message.
+
+```php
+$session->receive()->then(function ($msg) {
+    // Handle message
+});
+```
+
+### close
+
+Close the session.
+
+```php
+$session->close();
+```
+
+### getId
+
+Get the session ID.
+
+```php
+$id = $session->getId();
+```
+
+### getState
+
+Get the current session state.
+
+```php
+$state = $session->getState();
+```
+
+## Session States
+
+```php
+use ChuckyCloud\Sdk\Types\SessionState;
+
+SessionState::IDLE           // Not connected
+SessionState::INITIALIZING   // Connecting
+SessionState::READY          // Ready to send
+SessionState::PROCESSING     // Processing message
+SessionState::WAITING_TOOL   // Waiting for tool result
+SessionState::COMPLETED      // Session ended
+SessionState::ERROR          // Error occurred
+```
+
+## Event Handlers
+
+```php
+use ChuckyCloud\Sdk\Client\SessionEventHandlers;
+
+$handlers = new SessionEventHandlers();
+$handlers->onMessage = fn($msg) => handleMessage($msg);
+$handlers->onError = fn(\Exception $e) => handleError($e);
+$handlers->onClose = fn() => echo "Session closed\n";
+
+$session->on($handlers);
+```
+
+## Message Types
+
+### AssistantMessage
+
+Message from Claude.
+
+```php
+use ChuckyCloud\Sdk\Types\AssistantMessage;
+
+if ($msg instanceof AssistantMessage) {
+    $text = $msg->getText();
+    $model = $msg->model;
+    $sessionId = $msg->sessionId;
+}
+```
+
+### ResultMessage
+
+Final result of the conversation.
+
+```php
+use ChuckyCloud\Sdk\Types\ResultMessage;
+
+if ($msg instanceof ResultMessage) {
+    echo "Result: {$msg->result}\n";
+    echo "Cost: \${$msg->totalCostUsd}\n";
+    echo "Turns: {$msg->numTurns}\n";
+    echo "Duration: {$msg->durationMs}ms\n";
+    echo "Error: " . ($msg->isError ? 'yes' : 'no') . "\n";
+}
+```
+
+### SystemMessage
+
+System events.
+
+```php
+use ChuckyCloud\Sdk\Types\SystemMessage;
+use ChuckyCloud\Sdk\Types\SystemSubtype;
+
+if ($msg instanceof SystemMessage) {
+    switch ($msg->subtype) {
+        case SystemSubtype::INIT:
+            echo "Session initialized: {$msg->sessionId}\n";
+            break;
+        case SystemSubtype::TURN_START:
+            echo "Turn started\n";
+            break;
+        case SystemSubtype::TURN_END:
+            echo "Turn ended\n";
+            break;
+    }
+}
+```
+
+### ErrorMessage
+
+Error messages.
+
+```php
+use ChuckyCloud\Sdk\Types\ErrorMessage;
+
+if ($msg instanceof ErrorMessage) {
+    echo "Error: {$msg->message}\n";
+    echo "Code: {$msg->errorCode}\n";
+}
+```
+
+### ControlMessage
+
+Control messages.
+
+```php
+use ChuckyCloud\Sdk\Types\ControlMessage;
+use ChuckyCloud\Sdk\Types\ControlAction;
+
+if ($msg instanceof ControlMessage) {
+    if ($msg->action === ControlAction::READY) {
+        echo "Ready!\n";
+    }
+}
+```
+
+## Full Example with Message Loop
+
+```php
+<?php
+
+$session->connect()->then(function () use ($session, $client) {
+    $session->send('Tell me a joke')->then(function () use ($session, $client) {
+        $receiveNext = function () use (&$receiveNext, $session, $client) {
+            $session->receive()->then(function ($msg) use (&$receiveNext, $session, $client) {
+                if ($msg instanceof SystemMessage) {
+                    echo "[System] {$msg->subtype->value}\n";
+                }
+
+                if ($msg instanceof AssistantMessage) {
+                    $text = $msg->getText();
+                    if ($text) {
+                        echo "[Assistant] {$text}\n";
+                    }
+                }
+
+                if ($msg instanceof ResultMessage) {
+                    echo "\n=== Result ===\n";
+                    echo "Answer: {$msg->result}\n";
+                    echo "Cost: \${$msg->totalCostUsd}\n";
+                    $session->close();
+                    $client->stop();
+                    return;
+                }
+
+                $receiveNext();
+            });
+        };
+
+        $receiveNext();
+    });
+});
+
+$client->run();
+```
+
+## Resuming Sessions
+
+Resume an existing session:
+
+```php
+$session = $client->resumeSession($sessionId, new SessionOptions(
+    model: Model::CLAUDE_SONNET,
+));
+
+$session->connect()->then(function () use ($session) {
+    $session->send('Continue from where we left off')->then(function () {
+        // Handle response
+    });
+});
+```
+
+## Multi-turn Conversations
+
+```php
+function chat(Session $session, string $message): void
+{
+    global $client;
+
+    $session->send($message)->then(function () use ($session, $client) {
+        $receiveNext = function () use (&$receiveNext, $session, $client) {
+            $session->receive()->then(function ($msg) use (&$receiveNext, $session, $client) {
+                if ($msg instanceof AssistantMessage) {
+                    echo $msg->getText() . "\n";
+                }
+
+                if ($msg instanceof ResultMessage) {
+                    // Ready for next message
+                    return;
+                }
+
+                $receiveNext();
+            });
+        };
+        $receiveNext();
+    });
+}
+
+// Usage
+chat($session, 'First message');
+chat($session, 'Follow-up question');
+```

@@ -1,0 +1,262 @@
+---
+title: 'Client'
+description: 'PHP SDK client reference'
+---
+
+## Installation
+
+```bash
+composer require chucky-cloud/sdk
+```
+
+## Requirements
+
+- PHP 8.1+
+- Composer
+
+## Creating a Client
+
+```php
+<?php
+
+use ChuckyCloud\Sdk\Client\ChuckyClient;
+use ChuckyCloud\Sdk\Types\ClientOptions;
+
+$client = new ChuckyClient(new ClientOptions(
+    token: $token,
+    baseUrl: 'wss://conjure.chucky.cloud/ws',  // optional, default
+    debug: false,                               // optional
+    timeout: 60.0,                              // optional, seconds
+    keepAliveInterval: 300.0,                   // optional, seconds
+));
+```
+
+Or use the convenience function:
+
+```php
+<?php
+
+use function ChuckyCloud\Sdk\createClient;
+
+$client = createClient($token, [
+    'debug' => true,
+    'timeout' => 120.0,
+]);
+```
+
+## ClientOptions
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `token` | `string` | *required* | JWT authentication token |
+| `baseUrl` | `string` | `wss://conjure.chucky.cloud/ws` | WebSocket server URL |
+| `debug` | `bool` | `false` | Enable debug logging |
+| `timeout` | `float` | `60.0` | Connection timeout in seconds |
+| `keepAliveInterval` | `float` | `300.0` | Keep-alive ping interval in seconds |
+
+## Methods
+
+### createSession
+
+Create a new session.
+
+```php
+$session = $client->createSession(new SessionOptions(
+    model: Model::CLAUDE_SONNET,
+    maxTurns: 10,
+));
+```
+
+### resumeSession
+
+Resume an existing session by ID.
+
+```php
+$session = $client->resumeSession($sessionId, new SessionOptions(
+    model: Model::CLAUDE_SONNET,
+));
+```
+
+### close
+
+Close all sessions and disconnect.
+
+```php
+$client->close();
+```
+
+### run
+
+Run the event loop (blocks until stopped).
+
+```php
+$client->run();
+```
+
+### stop
+
+Stop the event loop.
+
+```php
+$client->stop();
+```
+
+### getLoop
+
+Get the ReactPHP event loop instance.
+
+```php
+$loop = $client->getLoop();
+```
+
+## Event Handlers
+
+```php
+use ChuckyCloud\Sdk\Client\ClientEventHandlers;
+
+$handlers = new ClientEventHandlers();
+$handlers->onConnect = fn() => echo "Connected!\n";
+$handlers->onDisconnect = fn() => echo "Disconnected!\n";
+$handlers->onSessionStart = fn(string $id) => echo "Session started: {$id}\n";
+$handlers->onSessionEnd = fn(string $id) => echo "Session ended: {$id}\n";
+$handlers->onError = fn(\Exception $e) => echo "Error: {$e->getMessage()}\n";
+
+$client->on($handlers);
+```
+
+## Token Creation
+
+Create tokens server-side for authentication:
+
+```php
+<?php
+
+use function ChuckyCloud\Sdk\Utils\createToken;
+use function ChuckyCloud\Sdk\Utils\createBudget;
+use ChuckyCloud\Sdk\Utils\CreateTokenOptions;
+use ChuckyCloud\Sdk\Utils\CreateBudgetOptions;
+use ChuckyCloud\Sdk\Types\BudgetWindow;
+
+$token = createToken(new CreateTokenOptions(
+    userId: 'user-123',
+    projectId: $_ENV['CHUCKY_PROJECT_ID'],
+    secret: $_ENV['CHUCKY_HMAC_SECRET'],
+    budget: createBudget(new CreateBudgetOptions(
+        aiDollars: 1.0,
+        computeHours: 0.5,
+        window: BudgetWindow::DAY,
+    )),
+    expiresIn: 3600,  // 1 hour
+));
+```
+
+Or use the array-based API:
+
+```php
+<?php
+
+use function ChuckyCloud\Sdk\createToken;
+use function ChuckyCloud\Sdk\createBudget;
+use ChuckyCloud\Sdk\Types\BudgetWindow;
+
+$token = createToken([
+    'userId' => 'user-123',
+    'projectId' => $_ENV['CHUCKY_PROJECT_ID'],
+    'secret' => $_ENV['CHUCKY_HMAC_SECRET'],
+    'budget' => createBudget([
+        'aiDollars' => 1.0,
+        'computeHours' => 0.5,
+        'window' => BudgetWindow::DAY,
+    ]),
+    'expiresIn' => 3600,
+]);
+```
+
+## Token Utilities
+
+```php
+<?php
+
+use function ChuckyCloud\Sdk\Utils\decodeToken;
+use function ChuckyCloud\Sdk\Utils\verifyToken;
+use function ChuckyCloud\Sdk\Utils\isTokenExpired;
+
+// Decode without verification
+$payload = decodeToken($token);
+
+// Verify signature
+$payload = verifyToken($token, $secret);
+
+// Check expiration
+$expired = isTokenExpired($token);
+```
+
+## Full Example
+
+```php
+<?php
+
+require_once __DIR__ . '/vendor/autoload.php';
+
+use ChuckyCloud\Sdk\Client\ChuckyClient;
+use ChuckyCloud\Sdk\Types\ClientOptions;
+use ChuckyCloud\Sdk\Types\SessionOptions;
+use ChuckyCloud\Sdk\Types\Model;
+use ChuckyCloud\Sdk\Types\BudgetWindow;
+use ChuckyCloud\Sdk\Types\AssistantMessage;
+use ChuckyCloud\Sdk\Types\ResultMessage;
+use ChuckyCloud\Sdk\Utils\CreateBudgetOptions;
+use ChuckyCloud\Sdk\Utils\CreateTokenOptions;
+
+use function ChuckyCloud\Sdk\Utils\createBudget;
+use function ChuckyCloud\Sdk\Utils\createToken;
+
+// Create token
+$token = createToken(new CreateTokenOptions(
+    userId: 'user-123',
+    projectId: getenv('CHUCKY_PROJECT_ID'),
+    secret: getenv('CHUCKY_HMAC_SECRET'),
+    budget: createBudget(new CreateBudgetOptions(
+        aiDollars: 1.0,
+        window: BudgetWindow::HOUR,
+    )),
+));
+
+// Create client
+$client = new ChuckyClient(new ClientOptions(
+    token: $token,
+    debug: true,
+));
+
+// Create session
+$session = $client->createSession(new SessionOptions(
+    model: Model::CLAUDE_SONNET,
+    maxTurns: 5,
+));
+
+// Connect and send message
+$session->connect()->then(function () use ($session, $client) {
+    $session->send('Hello, Claude!')->then(function () use ($session, $client) {
+        $receiveNext = function () use (&$receiveNext, $session, $client) {
+            $session->receive()->then(function ($msg) use (&$receiveNext, $session, $client) {
+                if ($msg instanceof AssistantMessage) {
+                    echo $msg->getText() . "\n";
+                }
+
+                if ($msg instanceof ResultMessage) {
+                    echo "Cost: \${$msg->totalCostUsd}\n";
+                    $session->close();
+                    $client->stop();
+                    return;
+                }
+
+                $receiveNext();
+            });
+        };
+        $receiveNext();
+    });
+});
+
+// Run event loop
+$client->run();
+```
