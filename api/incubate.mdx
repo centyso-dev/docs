@@ -123,6 +123,22 @@ Poll the status of a queued prompt.
 }
 ```
 
+#### Response Fields
+
+| Field | Description |
+|-------|-------------|
+| `vesselId` | Unique run ID for tracking |
+| `status` | Current execution status |
+| `isHatched` | `true` when execution is complete (success or failure) |
+| `isSuccess` | `true` if completed successfully |
+| `isFailed` | `true` if execution failed |
+| `hatchedAt` | Timestamp when execution completed |
+| `output` | Result payload (only when `isHatched: true`) |
+
+<Note>
+  The "incubate/hatch" metaphor: prompts are **incubated** (queued), then **hatch** when complete.
+</Note>
+
 #### Status Values
 
 | Status | Description |
@@ -130,8 +146,8 @@ Poll the status of a queued prompt.
 | `PENDING` | Waiting to be processed |
 | `QUEUED` | In queue, waiting for capacity |
 | `EXECUTING` | Currently running |
-| `COMPLETED` | Finished successfully |
-| `FAILED` | Execution failed |
+| `COMPLETED` | Finished successfully (`isHatched: true`, `isSuccess: true`) |
+| `FAILED` | Execution failed (`isHatched: true`, `isFailed: true`) |
 | `CANCELED` | Canceled by user |
 
 ### Batch Queue
