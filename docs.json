@@ -73,7 +73,8 @@
           {
             "group": "REST API",
             "pages": [
-              "api/rest"
+              "api/rest",
+              "api/incubate"
             ]
           },
           {
