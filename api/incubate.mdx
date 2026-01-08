@@ -89,7 +89,7 @@ Poll the status of a queued prompt.
   "vesselId": "run_abc123xyz",
   "status": "QUEUED",
   "taskIdentifier": "chucky-incubate",
-  "isHatched": false,
+  "isCompleted": false,
   "isSuccess": false,
   "isFailed": false,
   "createdAt": "2024-01-08T10:00:00.000Z",
@@ -104,13 +104,13 @@ Poll the status of a queued prompt.
   "vesselId": "run_abc123xyz",
   "status": "COMPLETED",
   "taskIdentifier": "chucky-incubate",
-  "isHatched": true,
+  "isCompleted": true,
   "isSuccess": true,
   "isFailed": false,
   "createdAt": "2024-01-08T10:00:00.000Z",
   "updatedAt": "2024-01-08T10:00:30.000Z",
   "startedAt": "2024-01-08T10:00:01.000Z",
-  "hatchedAt": "2024-01-08T10:00:30.000Z",
+  "completedAt": "2024-01-08T10:00:30.000Z",
   "output": {
     "success": true,
     "text": "Here is your generated report...",
@@ -129,15 +129,11 @@ Poll the status of a queued prompt.
 |-------|-------------|
 | `vesselId` | Unique run ID for tracking |
 | `status` | Current execution status |
-| `isHatched` | `true` when execution is complete (success or failure) |
+| `isCompleted` | `true` when execution is complete (success or failure) |
 | `isSuccess` | `true` if completed successfully |
 | `isFailed` | `true` if execution failed |
-| `hatchedAt` | Timestamp when execution completed |
-| `output` | Result payload (only when `isHatched: true`) |
-
-<Note>
-  The "incubate/hatch" metaphor: prompts are **incubated** (queued), then **hatch** when complete.
-</Note>
+| `completedAt` | Timestamp when execution completed |
+| `output` | Result payload (only when `isCompleted: true`) |
 
 #### Status Values
 
@@ -146,8 +142,8 @@ Poll the status of a queued prompt.
 | `PENDING` | Waiting to be processed |
 | `QUEUED` | In queue, waiting for capacity |
 | `EXECUTING` | Currently running |
-| `COMPLETED` | Finished successfully (`isHatched: true`, `isSuccess: true`) |
-| `FAILED` | Execution failed (`isHatched: true`, `isFailed: true`) |
+| `COMPLETED` | Finished successfully (`isCompleted: true`, `isSuccess: true`) |
+| `FAILED` | Execution failed (`isCompleted: true`, `isFailed: true`) |
 | `CANCELED` | Canceled by user |
 
 ### Batch Queue
@@ -344,7 +340,7 @@ async function waitForCompletion(vesselId, maxWaitMs = 300000) {
     );
     const status = await response.json();
 
-    if (status.isHatched) {
+    if (status.isCompleted) {
       return status;
     }
 
