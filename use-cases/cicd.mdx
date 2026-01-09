@@ -28,6 +28,17 @@ flowchart LR
     cloud --> commit
 ```
 
+## Two Approaches
+
+There are two ways to give Claude access to your code in CI/CD:
+
+1. **Possession Mode** - Claude reads files directly from the runner via `--allow-possession`
+2. **Deploy Workspace** - Upload code to Chucky cloud with `chucky deploy`, then run jobs
+
+<Tip>
+**Possession Mode** is simpler for quick tasks. **Deploy** is better for complex operations or when you want changes tracked in git bundles.
+</Tip>
+
 ## GitHub Actions Examples
 
 ### PR Review Bot
@@ -60,26 +71,19 @@ jobs:
       - name: Install Chucky CLI
         run: npm install -g @chucky.cloud/cli
 
-      - name: Get changed files
-        id: changed
-        run: |
-          FILES=$(git diff --name-only origin/${{ github.base_ref }}...HEAD | head -20)
-          echo "files=$FILES" >> $GITHUB_OUTPUT
-
       - name: Run AI Review
         env:
           CHUCKY_API_KEY: ${{ secrets.CHUCKY_API_KEY }}
         run: |
-          chucky prompt "Review the following code changes for:
+          chucky prompt "Review the code changes in this PR for:
           - Security vulnerabilities
           - Performance issues
           - Code style improvements
           - Potential bugs
 
-          Changed files:
-          ${{ steps.changed.outputs.files }}
-
-          Provide specific, actionable feedback." \
+          Focus on files changed in this PR. Provide specific, actionable feedback." \
+          --allow-possession \
+          --dangerously-skip-permissions \
           --output-format json > review.json
 
       - name: Post Review Comment
@@ -271,6 +275,8 @@ jobs:
           - Recommended fix
 
           Format as a security report." \
+          --allow-possession \
+          --dangerously-skip-permissions \
           --output-format json > audit.json
 
       - name: Create Issue
@@ -291,7 +297,7 @@ jobs:
 
 ## GitLab CI Examples
 
-### PR Review
+### MR Review
 
 ```yaml
 # .gitlab-ci.yml
@@ -301,10 +307,10 @@ ai-review:
   script:
     - npm install -g @chucky.cloud/cli
     - |
-      chucky prompt "Review the changes in this merge request:
-      $(git diff origin/$CI_MERGE_REQUEST_TARGET_BRANCH_NAME...HEAD --stat)
-
+      chucky prompt "Review the code changes in this merge request.
       Focus on code quality and potential issues." \
+      --allow-possession \
+      --dangerously-skip-permissions \
       --output-format json > review.json
     - |
       # Post to GitLab MR
@@ -439,14 +445,20 @@ on:
 
 ## Common Tasks
 
+All commands below assume `--allow-possession --dangerously-skip-permissions` flags:
+
 | Task | Command |
 |------|---------|
 | PR Review | `chucky prompt "Review this PR for issues"` |
-| Generate Tests | `chucky prompt "Generate unit tests for changed files" --apply` |
-| Update Docs | `chucky prompt "Update README based on recent changes" --apply` |
-| Fix Linting | `chucky prompt "Fix all ESLint errors" --apply` |
-| Translate | `chucky prompt "Translate strings to Spanish" --apply` |
-| Deprecation | `chucky prompt "Update deprecated API usage" --apply` |
+| Generate Tests | `chucky prompt "Generate unit tests for changed files"` |
+| Update Docs | `chucky prompt "Update README based on recent changes"` |
+| Fix Linting | `chucky prompt "Fix all ESLint errors"` |
+| Translate | `chucky prompt "Translate strings to Spanish"` |
+| Deprecation | `chucky prompt "Update deprecated API usage"` |
+
+<Note>
+Add `--apply` to automatically apply changes from the git bundle after Claude makes modifications.
+</Note>
 
 ## Next Steps
 
