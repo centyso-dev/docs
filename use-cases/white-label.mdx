@@ -16,38 +16,29 @@ A platform that:
 
 ## Architecture
 
-```
-┌─────────────────────────────────────────────────────────────────────────┐
-│                        YOUR PLATFORM                                    │
-│                                                                         │
-│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐                     │
-│  │  Client A   │  │  Client B   │  │  Client C   │   Clients           │
-│  │  (Acme Co)  │  │  (Beta Inc) │  │  (Gamma)    │                     │
-│  └──────┬──────┘  └──────┬──────┘  └──────┬──────┘                     │
-│         │                │                │                             │
-│         ▼                ▼                ▼                             │
-│  ┌─────────────────────────────────────────────────────────────────┐   │
-│  │                     YOUR BACKEND                                │   │
-│  │                                                                 │   │
-│  │  • User authentication (your auth system)                       │   │
-│  │  • Subscription tier lookup                                     │   │
-│  │  • Token generation with budgets                                │   │
-│  │  • Usage dashboard                                              │   │
-│  │                                                                 │   │
-│  └─────────────────────────────────────┬───────────────────────────┘   │
-│                                        │                               │
-└────────────────────────────────────────┼───────────────────────────────┘
-                                         │ JWT with budget
-                                         ▼
-┌─────────────────────────────────────────────────────────────────────────┐
-│                         CHUCKY CLOUD                                    │
-│                                                                         │
-│  • Validates JWT signature                                              │
-│  • Enforces budget limits at edge                                       │
-│  • Tracks usage per user                                                │
-│  • Reports costs back to you                                            │
-│                                                                         │
-└─────────────────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TB
+    subgraph platform["YOUR PLATFORM"]
+        subgraph clients["Clients"]
+            clientA["Client A\n(Acme Co)"]
+            clientB["Client B\n(Beta Inc)"]
+            clientC["Client C\n(Gamma)"]
+        end
+
+        backend["YOUR BACKEND\n\n• User authentication\n• Subscription tier lookup\n• Token generation with budgets\n• Usage dashboard"]
+
+        clientA --> backend
+        clientB --> backend
+        clientC --> backend
+    end
+
+    jwt["JWT with budget"]
+
+    subgraph cloud["CHUCKY CLOUD"]
+        services["• Validates JWT signature\n• Enforces budget limits at edge\n• Tracks usage per user\n• Reports costs back to you"]
+    end
+
+    backend --> jwt --> cloud
 ```
 
 ## How Budget Enforcement Works

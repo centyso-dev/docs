@@ -61,16 +61,14 @@ Data transferred out of Chucky's network:
 
 ### How It Works
 
-```
-┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
-│   Your Server   │     │   Chucky Edge   │     │    Request      │
-│                 │     │                 │     │                 │
-│  Creates token  │────▶│  Validates JWT  │────▶│  Allowed if     │
-│  with budget:   │     │  Checks budget  │     │  within budget  │
-│  $5/day         │     │  for user       │     │                 │
-│                 │     │                 │     │  Rejected if    │
-│                 │     │  Tracks usage   │◀────│  over budget    │
-└─────────────────┘     └─────────────────┘     └─────────────────┘
+```mermaid
+flowchart LR
+    server["Your Server\n\nCreates token\nwith budget:\n$5/day"]
+    edge["Chucky Edge\n\nValidates JWT\nChecks budget\nTracks usage"]
+    request["Request\n\nAllowed if\nwithin budget\n\nRejected if\nover budget"]
+
+    server --> edge --> request
+    request -.-> edge
 ```
 
 ### Setting Budgets

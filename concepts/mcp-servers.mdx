@@ -7,19 +7,34 @@ MCP (Model Context Protocol) servers let you bundle multiple tools together and 
 
 ## Overview
 
-```
-┌─────────────────────────────────────────────────────────────────────┐
-│                        MCP SERVER TYPES                             │
-├─────────────────┬─────────────────┬─────────────────┬───────────────┤
-│  Client Tools   │  Stdio Server   │   SSE Server    │  HTTP Server  │
-│  (SDK-defined)  │  (subprocess)   │  (streaming)    │  (REST API)   │
-├─────────────────┼─────────────────┼─────────────────┼───────────────┤
-│ • Runs in your  │ • External      │ • Server-Sent   │ • REST API    │
-│   app process   │   process       │   Events        │   endpoint    │
-│ • Full access   │ • stdio comm    │ • Real-time     │ • Stateless   │
-│   to app state  │ • Any language  │   updates       │ • Any backend │
-└─────────────────┴─────────────────┴─────────────────┴───────────────┘
-```
+<CardGroup cols={2}>
+  <Card title="Client Tools" icon="code">
+    **SDK-defined**
+
+    - Runs in your app process
+    - Full access to app state
+  </Card>
+  <Card title="Stdio Server" icon="terminal">
+    **Subprocess**
+
+    - External process
+    - stdio communication
+    - Any language
+  </Card>
+  <Card title="SSE Server" icon="signal-stream">
+    **Streaming**
+
+    - Server-Sent Events
+    - Real-time updates
+  </Card>
+  <Card title="HTTP Server" icon="globe">
+    **REST API**
+
+    - REST API endpoint
+    - Stateless
+    - Any backend
+  </Card>
+</CardGroup>
 
 ## Client Tools (Most Common)
 

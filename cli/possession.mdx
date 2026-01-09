@@ -4,8 +4,6 @@ description: Let Claude execute commands and modify files on your local machine
 sidebarTitle: Possession Mode
 ---
 
-# Possession Mode
-
 <Warning>
 **Possession mode gives Claude direct access to your local machine.** It can execute shell commands, read/write files, and modify your filesystem. Use with caution and only in trusted environments.
 </Warning>
@@ -186,15 +184,14 @@ Possession mode is powerful but potentially dangerous. Consider these precaution
 
 ## How It Works
 
-```
-┌─────────────────┐     WebSocket      ┌──────────────────┐     API Call     ┌────────────────┐
-│   Your Machine  │ ◄─────────────────► │  Chucky Sandbox  │ ◄───────────────► │   Claude API   │
-│  (CLI + Tools)  │                     │  (WebSocket Hub) │                   │   (Anthropic)  │
-└─────────────────┘   Tool Results      └──────────────────┘                   └────────────────┘
-        │                                        │
-        ▼                                        ▼
-   Host Tools                              Claude Code
-   Execute Here                           Orchestrates
+```mermaid
+flowchart LR
+    machine["Your Machine\n(CLI + Tools)\n\nHost Tools\nExecute Here"]
+    sandbox["Chucky Sandbox\n(WebSocket Hub)\n\nClaude Code\nOrchestrates"]
+    api["Claude API\n(Anthropic)"]
+
+    machine <-->|"WebSocket\nTool Results"| sandbox
+    sandbox <-->|"API Call"| api
 ```
 
 1. CLI connects to Chucky sandbox via WebSocket

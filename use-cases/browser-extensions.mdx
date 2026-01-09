@@ -15,29 +15,25 @@ A browser extension that:
 
 ## Architecture
 
-```
-┌─────────────────────────────────────────────────────────────────────────┐
-│                           BROWSER                                       │
-│  ┌─────────────┐    ┌─────────────┐    ┌─────────────────────────────┐ │
-│  │   Popup     │    │  Content    │    │        Web Page             │ │
-│  │             │    │   Script    │    │                             │ │
-│  │  User types │───▶│  Tool       │───▶│  DOM manipulation           │ │
-│  │  "Extract   │    │  handlers   │    │  document.querySelector()   │ │
-│  │   emails"   │    │             │◀───│  element.click()            │ │
-│  │             │    │             │    │  form.submit()              │ │
-│  └──────┬──────┘    └─────────────┘    └─────────────────────────────┘ │
-│         │                                                               │
-│         │ Chucky SDK (WebSocket)                                        │
-└─────────┼───────────────────────────────────────────────────────────────┘
-          │
-          ▼
-┌─────────────────────────────────────────────────────────────────────────┐
-│                        CHUCKY CLOUD                                     │
-│                                                                         │
-│   Claude receives: page content + user request + tool definitions       │
-│   Claude responds: text + tool calls (executed in browser)              │
-│                                                                         │
-└─────────────────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TB
+    subgraph browser["BROWSER"]
+        popup["Popup\nUser types 'Extract emails'"]
+        content["Content Script\nTool handlers"]
+        page["Web Page\nDOM manipulation"]
+
+        popup --> content
+        content <--> page
+    end
+
+    sdk["Chucky SDK (WebSocket)"]
+
+    subgraph cloud["CHUCKY CLOUD"]
+        claude["Claude receives: page content + user request + tool definitions\nClaude responds: text + tool calls (executed in browser)"]
+    end
+
+    popup --> sdk
+    sdk --> cloud
 ```
 
 ## Quick Start

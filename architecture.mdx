@@ -7,41 +7,31 @@ Chucky sits between your application and Claude, providing managed infrastructur
 
 ## System Overview
 
-```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                              YOUR APPLICATION                                │
-│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐        │
-│  │   Browser   │  │   Node.js   │  │     CLI     │  │   Mobile    │        │
-│  │     App     │  │   Server    │  │    Tool     │  │     App     │        │
-│  └──────┬──────┘  └──────┬──────┘  └──────┬──────┘  └──────┬──────┘        │
-│         │                │                │                │                │
-│         └────────────────┴────────────────┴────────────────┘                │
-│                                   │                                          │
-│                          Chucky SDK (WebSocket)                              │
-└──────────────────────────────────┬───────────────────────────────────────────┘
-                                   │
-                                   ▼
-┌──────────────────────────────────────────────────────────────────────────────┐
-│                           CHUCKY CLOUD (Edge)                                │
-│                                                                              │
-│  ┌────────────────┐    ┌────────────────┐    ┌────────────────┐            │
-│  │  Auth & Budget │───▶│    Session     │───▶│    Sandbox     │            │
-│  │   Enforcement  │    │   Management   │    │   Execution    │            │
-│  └────────────────┘    └────────────────┘    └───────┬────────┘            │
-│                                                      │                      │
-│  • JWT validation          • Multi-turn state       │ • Isolated container │
-│  • Budget tracking         • Context management     │ • File system access │
-│  • Rate limiting           • Session persistence    │ • Shell execution    │
-│  • Usage metering          • Resume/fork            │ • Git integration    │
-│                                                      │                      │
-└──────────────────────────────────────────────────────┼──────────────────────┘
-                                                       │
-                                                       ▼
-                                   ┌────────────────────────────────┐
-                                   │        ANTHROPIC API          │
-                                   │                                │
-                                   │   Claude Sonnet / Opus / Haiku │
-                                   └────────────────────────────────┘
+```mermaid
+flowchart TB
+    subgraph app["YOUR APPLICATION"]
+        direction LR
+        browser["Browser App"]
+        node["Node.js Server"]
+        cli["CLI Tool"]
+        mobile["Mobile App"]
+    end
+
+    sdk["Chucky SDK (WebSocket)"]
+
+    subgraph cloud["CHUCKY CLOUD (Edge)"]
+        auth["Auth & Budget\nEnforcement\n\n• JWT validation\n• Budget tracking\n• Rate limiting\n• Usage metering"]
+        session["Session\nManagement\n\n• Multi-turn state\n• Context management\n• Session persistence\n• Resume/fork"]
+        sandbox["Sandbox\nExecution\n\n• Isolated container\n• File system access\n• Shell execution\n• Git integration"]
+
+        auth --> session --> sandbox
+    end
+
+    anthropic["ANTHROPIC API\nClaude Sonnet / Opus / Haiku"]
+
+    app --> sdk
+    sdk --> cloud
+    sandbox --> anthropic
 ```
 
 ## Request Flow
@@ -100,24 +90,35 @@ Results stream back through the same WebSocket:
 
 Tools can execute in different places depending on your needs:
 
-```
-┌─────────────────────────────────────────────────────────────────────┐
-│                         TOOL EXECUTION                              │
-├─────────────────────┬─────────────────────┬─────────────────────────┤
-│    BROWSER TOOLS    │   SANDBOX TOOLS     │     HOST TOOLS          │
-│                     │                     │   (Possession Mode)     │
-├─────────────────────┼─────────────────────┼─────────────────────────┤
-│ • DOM manipulation  │ • File read/write   │ • HostBash              │
-│ • Local storage     │ • Shell commands    │ • HostRead              │
-│ • Alerts/modals     │ • Git operations    │ • HostWrite             │
-│ • Canvas drawing    │ • Build/test        │ • HostEdit              │
-│ • API calls         │ • Database access   │ • HostGlob              │
-│                     │                     │ • HostGrep              │
-├─────────────────────┼─────────────────────┼─────────────────────────┤
-│ Runs in user's      │ Runs in Chucky's    │ Runs on user's          │
-│ browser             │ cloud sandbox       │ local machine           │
-└─────────────────────┴─────────────────────┴─────────────────────────┘
-```
+<CardGroup cols={3}>
+  <Card title="Browser Tools" icon="browser">
+    **Runs in user's browser**
+
+    - DOM manipulation
+    - Local storage
+    - Alerts/modals
+    - Canvas drawing
+    - API calls
+  </Card>
+  <Card title="Sandbox Tools" icon="cloud">
+    **Runs in Chucky's cloud**
+
+    - File read/write
+    - Shell commands
+    - Git operations
+    - Build/test
+    - Database access
+  </Card>
+  <Card title="Host Tools" icon="desktop">
+    **Runs on user's machine** (Possession Mode)
+
+    - HostBash
+    - HostRead
+    - HostWrite
+    - HostEdit
+    - HostGlob/HostGrep
+  </Card>
+</CardGroup>
 
 ### Browser Tools
 
@@ -181,23 +182,18 @@ Each session runs in an isolated container:
 
 Changes made in the sandbox are packaged as git bundles:
 
-```
-Sandbox                          Your Machine
-   │                                  │
-   │  Claude makes changes            │
-   │  ────────────────────►           │
-   │                                  │
-   │  Changes committed to git        │
-   │  ────────────────────►           │
-   │                                  │
-   │  Bundle created & uploaded       │
-   │  ════════════════════════════►   │
-   │                                  │
-   │                    chucky fetch  │
-   │                    chucky diff   │
-   │                    chucky apply  │
-   │                                  ▼
-   │                           Your repo updated
+```mermaid
+sequenceDiagram
+    participant S as Sandbox
+    participant M as Your Machine
+
+    S->>S: Claude makes changes
+    S->>S: Changes committed to git
+    S->>M: Bundle created & uploaded
+    M->>M: chucky fetch
+    M->>M: chucky diff
+    M->>M: chucky apply
+    Note over M: Repo updated
 ```
 
 ---
@@ -206,20 +202,16 @@ Sandbox                          Your Machine
 
 Sessions progress through defined states:
 
-```
-┌─────────┐     ┌──────────────┐     ┌───────┐     ┌────────────┐
-│  idle   │────▶│ initializing │────▶│ ready │────▶│ processing │
-└─────────┘     └──────────────┘     └───────┘     └─────┬──────┘
-                                          ▲              │
-                                          │              ▼
-                                          │       ┌──────────────┐
-                                          └───────│ waiting_tool │
-                                                  └──────────────┘
-                                                         │
-                                                         ▼
-                                                  ┌───────────┐
-                                                  │ completed │
-                                                  └───────────┘
+```mermaid
+stateDiagram-v2
+    [*] --> idle
+    idle --> initializing
+    initializing --> ready
+    ready --> processing
+    processing --> waiting_tool
+    waiting_tool --> ready
+    processing --> completed
+    completed --> [*]
 ```
 
 | State | Description |

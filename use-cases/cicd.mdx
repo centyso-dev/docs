@@ -15,20 +15,17 @@ Automated workflows that:
 
 ## Architecture
 
-```
-┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
-│   Git Push      │────▶│  CI/CD Runner   │────▶│  Chucky Cloud   │
-│   PR Created    │     │  (GitHub/GitLab)│     │                 │
-└─────────────────┘     └────────┬────────┘     │  Claude reviews │
-                                 │              │  code, generates │
-                                 │              │  suggestions     │
-                                 │              └────────┬────────┘
-                                 │                       │
-                                 ▼                       ▼
-                        ┌─────────────────┐     ┌─────────────────┐
-                        │  PR Comment     │     │  Commit Changes │
-                        │  or Annotation  │     │  or Create PR   │
-                        └─────────────────┘     └─────────────────┘
+```mermaid
+flowchart LR
+    trigger["Git Push\nPR Created"]
+    runner["CI/CD Runner\n(GitHub/GitLab)"]
+    cloud["Chucky Cloud\n\nClaude reviews code,\ngenerates suggestions"]
+    comment["PR Comment\nor Annotation"]
+    commit["Commit Changes\nor Create PR"]
+
+    trigger --> runner --> cloud
+    runner --> comment
+    cloud --> commit
 ```
 
 ## GitHub Actions Examples

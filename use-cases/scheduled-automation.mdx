@@ -15,15 +15,13 @@ Automated scheduled tasks that:
 
 ## How It Works
 
-```
-┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
-│   Cron Trigger  │────▶│  Chucky Cloud   │────▶│   Your Webhook  │
-│   (scheduled)   │     │                 │     │   (optional)    │
-│                 │     │  Loads workspace│     │                 │
-│  0 9 * * 1-5   │     │  Runs prompt    │     │  Receives result│
-│  (9am weekdays) │     │  In sandbox     │     │  Posts to Slack │
-│                 │     │                 │     │  Creates issue  │
-└─────────────────┘     └─────────────────┘     └─────────────────┘
+```mermaid
+flowchart LR
+    cron["Cron Trigger\n(scheduled)\n\n0 9 * * 1-5\n(9am weekdays)"]
+    cloud["Chucky Cloud\n\nLoads workspace\nRuns prompt\nIn sandbox"]
+    webhook["Your Webhook\n(optional)\n\nReceives result\nPosts to Slack\nCreates issue"]
+
+    cron --> cloud --> webhook
 ```
 
 ## Configuration

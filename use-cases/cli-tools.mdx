@@ -15,30 +15,21 @@ A CLI tool that:
 
 ## Architecture
 
-```
-┌──────────────────┐        ┌──────────────────┐        ┌──────────────────┐
-│   Your CLI       │        │   Chucky Cloud   │        │  User's Machine  │
-│                  │        │                  │        │                  │
-│  chucky prompt   │───────▶│  Claude thinks   │        │                  │
-│  "fix TS errors" │        │  decides actions │        │                  │
-│                  │        │        │         │        │                  │
-│                  │        │        ▼         │        │                  │
-│                  │◀───────│  tool_call:      │        │                  │
-│                  │        │  HostBash        │        │                  │
-│                  │        │                  │        │                  │
-│  Execute locally │────────────────────────────────────▶│  tsc --noEmit   │
-│                  │◀────────────────────────────────────│  (errors)       │
-│                  │        │                  │        │                  │
-│  Send result     │───────▶│  Claude sees     │        │                  │
-│                  │        │  errors, plans   │        │                  │
-│                  │        │  fixes           │        │                  │
-│                  │        │        │         │        │                  │
-│                  │◀───────│  tool_call:      │        │                  │
-│                  │        │  HostEdit        │        │                  │
-│                  │        │                  │        │                  │
-│  Execute locally │────────────────────────────────────▶│  Edit file      │
-│                  │        │                  │        │                  │
-└──────────────────┘        └──────────────────┘        └──────────────────┘
+```mermaid
+sequenceDiagram
+    participant CLI as Your CLI
+    participant Cloud as Chucky Cloud
+    participant Machine as User's Machine
+
+    CLI->>Cloud: chucky prompt "fix TS errors"
+    Cloud->>Cloud: Claude thinks, decides actions
+    Cloud->>CLI: tool_call: HostBash
+    CLI->>Machine: tsc --noEmit
+    Machine->>CLI: (errors)
+    CLI->>Cloud: Send result
+    Cloud->>Cloud: Claude sees errors, plans fixes
+    Cloud->>CLI: tool_call: HostEdit
+    CLI->>Machine: Edit file
 ```
 
 ## Quick Start
