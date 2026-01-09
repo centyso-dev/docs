@@ -1,0 +1,183 @@
+---
+title: Jobs
+description: Create and manage background jobs
+---
+
+# Jobs
+
+Jobs are background tasks that run asynchronously in the Chucky cloud. Unlike interactive prompts, jobs execute without waiting for real-time streaming - perfect for long-running tasks, scheduled work, or webhook-driven workflows.
+
+## Create a Job
+
+```bash
+chucky jobs create "Your task description" [options]
+```
+
+### Options
+
+| Option | Description | Default |
+|--------|-------------|---------|
+| `-m, --model <model>` | Model to use (e.g., `claude-sonnet-4-5-20250929`, `opus`, `haiku`) | `sonnet` |
+| `-s, --system-prompt <prompt>` | System prompt for the session | - |
+| `--max-turns <n>` | Maximum conversation turns | - |
+| `--callback-url <url>` | Webhook URL for result delivery | - |
+| `--callback-secret <secret>` | Secret for webhook HMAC signature | - |
+| `--ttl <seconds>` | Delay execution by N seconds | - |
+| `-w, --wait` | Wait for job completion | `false` |
+| `-a, --apply` | Wait for completion and apply changes (implies `--wait`) | `false` |
+| `--tools <tools>` | Tools config (JSON or comma-separated names) | - |
+| `--allowed-tools <tools>` | Comma-separated list of allowed tools | - |
+| `--disallowed-tools <tools>` | Comma-separated list of disallowed tools | - |
+| `--permission-mode <mode>` | Permission mode | `default` |
+| `--dangerously-skip-permissions` | Bypass all permission checks | `false` |
+
+### Examples
+
+**Simple job:**
+
+```bash
+chucky jobs create "Refactor all React components to use hooks"
+```
+
+**Wait for completion:**
+
+```bash
+chucky jobs create "Write unit tests for the auth module" --wait
+```
+
+**Apply changes automatically:**
+
+```bash
+chucky jobs create "Add error handling to all API endpoints" --apply
+```
+
+The `--apply` flag implies `--wait` and will automatically fetch and apply the git bundle when the job completes successfully.
+
+**With webhook callback:**
+
+```bash
+chucky jobs create "Generate API documentation" \
+  --callback-url "https://your-server.com/webhook" \
+  --callback-secret "your-secret-key"
+```
+
+**Delayed execution:**
+
+```bash
+chucky jobs create "Run database migrations" --ttl 3600
+```
+
+This schedules the job to start in 1 hour (3600 seconds).
+
+## List Jobs
+
+```bash
+chucky jobs list [options]
+```
+
+### Options
+
+| Option | Description | Default |
+|--------|-------------|---------|
+| `-s, --status <status>` | Filter by status (`PENDING`, `QUEUED`, `EXECUTING`, `COMPLETED`, `FAILED`, `CANCELED`) | All |
+| `-l, --limit <number>` | Number of jobs to show | `25` |
+
+### Example
+
+```bash
+chucky jobs list --status EXECUTING --limit 10
+```
+
+## Get Job Details
+
+```bash
+chucky jobs get <jobId> [options]
+```
+
+### Options
+
+| Option | Description |
+|--------|-------------|
+| `--json` | Output raw JSON response |
+
+### Example
+
+```bash
+chucky jobs get run_abc123def456
+
+# JSON output for scripting
+chucky jobs get run_abc123def456 --json
+```
+
+## Cancel a Job
+
+```bash
+chucky jobs cancel <jobId>
+```
+
+Cancels a running or queued job.
+
+```bash
+chucky jobs cancel run_abc123def456
+```
+
+## Job Lifecycle
+
+```
+PENDING → QUEUED → EXECUTING → COMPLETED/FAILED/CANCELED
+```
+
+1. **PENDING**: Job created, waiting to be queued
+2. **QUEUED**: Job in queue, waiting for available worker
+3. **EXECUTING**: Job running in sandbox
+4. **COMPLETED**: Job finished successfully
+5. **FAILED**: Job encountered an error
+6. **CANCELED**: Job was manually canceled
+
+## Webhooks
+
+When you provide a `--callback-url`, Chucky will POST the job result to your endpoint when the job completes:
+
+```json
+{
+  "type": "job.completed",
+  "job_id": "run_abc123def456",
+  "status": "COMPLETED",
+  "output": "Task completed successfully...",
+  "total_cost_usd": 0.0234,
+  "duration_ms": 45000
+}
+```
+
+If you provide a `--callback-secret`, the payload will include an HMAC signature in the `X-Chucky-Signature` header for verification.
+
+## Retrieving Job Changes
+
+When a job modifies files, those changes are saved as a git bundle. Use the bundle commands to retrieve them:
+
+```bash
+# Fetch changes to a local branch
+chucky fetch run_abc123def456
+
+# View what changed
+chucky diff run_abc123def456
+
+# Apply to your working directory
+chucky apply run_abc123def456
+
+# Or do it all in one step
+chucky pull run_abc123def456
+```
+
+See [Git Bundles](/cli/bundles) for detailed documentation.
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Git Bundles" icon="code-branch" href="/cli/bundles">
+    Learn how to fetch and apply changes from jobs
+  </Card>
+  <Card title="Sessions" icon="list" href="/cli/sessions">
+    View session history and details
+  </Card>
+</CardGroup>

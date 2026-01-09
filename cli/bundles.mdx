@@ -1,0 +1,236 @@
+---
+title: Git Bundles
+description: Fetch and apply file changes from cloud sessions
+---
+
+# Git Bundles
+
+When Claude makes file changes in the Chucky cloud sandbox, those changes are packaged as git bundles. The CLI provides a git-like workflow to fetch, review, and apply these changes to your local repository.
+
+## Overview
+
+The bundle workflow mirrors familiar git operations:
+
+| Command | Description | Git Equivalent |
+|---------|-------------|----------------|
+| `chucky fetch` | Download changes to a local branch | `git fetch` |
+| `chucky diff` | View pending changes | `git diff` |
+| `chucky log` | View commit history | `git log` |
+| `chucky apply` | Apply changes to working directory | `git merge` |
+| `chucky discard` | Remove fetched branch | `git branch -D` |
+| `chucky pull` | Fetch + apply in one step | `git pull` |
+
+## Fetch Changes
+
+Download changes from a session or job to a local branch:
+
+```bash
+chucky fetch <session-id|job-id>
+```
+
+### Options
+
+| Option | Description |
+|--------|-------------|
+| `--json` | Output JSON result |
+| `--quiet` | Minimal output |
+
+### Example
+
+```bash
+# Fetch from a session (partial IDs work)
+chucky fetch abc12345
+
+# Fetch from a job
+chucky fetch run_xyz789abc
+```
+
+This creates a local branch named `chucky/session-<id>` or `chucky/job-<id>`.
+
+## View Changes
+
+### Diff
+
+See what files were changed:
+
+```bash
+# Full diff output
+chucky diff abc12345
+
+# Summary statistics only
+chucky diff abc12345 --stat
+
+# JSON output
+chucky diff abc12345 --json
+```
+
+### Log
+
+View commit messages from the session:
+
+```bash
+chucky log abc12345
+
+# JSON output
+chucky log abc12345 --json
+```
+
+## Apply Changes
+
+Apply the fetched changes to your working directory:
+
+```bash
+chucky apply <session-id|job-id>
+```
+
+### Options
+
+| Option | Description |
+|--------|-------------|
+| `--force` | Force merge even if branches diverged |
+| `--json` | Output JSON result |
+| `--quiet` | Minimal output |
+
+### Merge Behavior
+
+The `apply` command:
+1. First attempts a fast-forward merge
+2. If branches have diverged, automatically falls back to a merge commit
+3. If there are conflicts, reports them for manual resolution
+
+```bash
+# Normal apply
+chucky apply abc12345
+
+# Force merge commit (useful when branches diverged)
+chucky apply abc12345 --force
+```
+
+## Discard Changes
+
+Remove the fetched branch without applying:
+
+```bash
+chucky discard <session-id|job-id>
+```
+
+This is idempotent - it won't error if the branch doesn't exist.
+
+## Pull (Fetch + Apply)
+
+Combine fetch and apply in one command:
+
+```bash
+chucky pull <session-id|job-id>
+```
+
+### Options
+
+| Option | Description |
+|--------|-------------|
+| `--force` | Force merge during apply |
+| `--json` | Output JSON result |
+| `--quiet` | Minimal output |
+
+## Auto-Apply with Prompts
+
+Use the `--apply` flag with `chucky prompt` to automatically apply changes when the session completes:
+
+```bash
+chucky prompt "Add input validation to the user form" --apply
+```
+
+This:
+1. Runs the prompt
+2. Waits for completion
+3. Fetches the bundle
+4. Applies changes to your working directory
+
+Similarly for jobs:
+
+```bash
+chucky jobs create "Refactor authentication module" --apply
+```
+
+## Working with IDs
+
+Both session IDs and job IDs work with all bundle commands:
+
+```bash
+# Session IDs are UUIDs, but partial IDs work
+chucky fetch abc12345              # First 8 chars of session ID
+chucky fetch abc12345-6789-...    # Full session ID
+
+# Job IDs start with run_
+chucky fetch run_xyz789abc
+```
+
+## Branch Naming
+
+Fetched bundles create branches with predictable names:
+
+- Sessions: `chucky/session-<full-session-id>`
+- Jobs: `chucky/job-<job-id>`
+
+You can work with these branches directly using git commands if needed:
+
+```bash
+git log chucky/session-abc12345...
+git diff chucky/session-abc12345
+git checkout chucky/session-abc12345
+```
+
+## Common Workflows
+
+### Review Before Apply
+
+```bash
+# Fetch and review
+chucky fetch abc12345
+chucky diff abc12345 --stat
+chucky log abc12345
+
+# If looks good, apply
+chucky apply abc12345
+
+# Or discard if not wanted
+chucky discard abc12345
+```
+
+### Quick Apply
+
+```bash
+# Trust Claude and apply immediately
+chucky pull abc12345
+```
+
+### Automated Pipeline
+
+```bash
+# Use JSON output for scripting
+result=$(chucky pull abc12345 --json)
+if echo "$result" | jq -e '.status == "applied"' > /dev/null; then
+  echo "Changes applied successfully"
+  npm test
+fi
+```
+
+## Error Handling
+
+| Error | Cause | Solution |
+|-------|-------|----------|
+| `Branch already exists` | Already fetched | Use `apply` or `discard` first |
+| `Branch not found` | Haven't fetched yet | Run `fetch` first |
+| `No bundle available` | Session made no changes | Nothing to apply |
+| `Merge conflict` | Local changes conflict | Resolve conflicts manually |
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Prompt Command" icon="terminal" href="/cli/prompt">
+    Run interactive prompts with --apply
+  </Card>
+  <Card title="Jobs" icon="clock" href="/cli/jobs">
+    Create background jobs
+  </Card>
+</CardGroup>

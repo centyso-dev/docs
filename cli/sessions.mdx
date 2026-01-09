@@ -1,0 +1,106 @@
+---
+title: Sessions
+description: View and manage session history
+---
+
+# Sessions
+
+Sessions represent individual interactions with Claude in the Chucky cloud. Every `chucky prompt` command and every job creates a session. Use the sessions command to view history, track usage, and access changes made during sessions.
+
+## List Sessions
+
+```bash
+chucky sessions [options]
+```
+
+### Options
+
+| Option | Description | Default |
+|--------|-------------|---------|
+| `-l, --limit <number>` | Number of sessions to show | `20` |
+| `--with-bundle` | Only show sessions with git bundles | `false` |
+| `--json` | Output raw JSON response | `false` |
+
+### Examples
+
+**List recent sessions:**
+
+```bash
+chucky sessions
+```
+
+**Show only sessions with changes:**
+
+```bash
+chucky sessions --with-bundle
+```
+
+**JSON output for scripting:**
+
+```bash
+chucky sessions --json --limit 50
+```
+
+## Output
+
+The sessions list shows:
+
+```
+abc12345 completed   3.2s   $0.0123 cli-user        [bundle]
+def67890 completed   1.5s   $0.0045 cli-user
+ghi11223 failed      0.8s   $0.0012 api-user
+jkl44556 running     -      -       webhook-user    job:run_xyz789
+```
+
+| Column | Description |
+|--------|-------------|
+| ID | First 8 characters of session ID |
+| Status | `completed`, `failed`, or `running` |
+| Duration | Time taken to complete |
+| Cost | Total API cost in USD |
+| User ID | User identifier from JWT token |
+| `[bundle]` | Indicates session has file changes |
+| `job:...` | Associated job ID (for background jobs) |
+
+## Session Status
+
+| Status | Description |
+|--------|-------------|
+| `running` | Session is currently active |
+| `completed` | Session finished successfully |
+| `failed` | Session encountered an error |
+
+## Accessing Session Changes
+
+When a session modifies files (indicated by `[bundle]`), you can fetch and apply those changes:
+
+```bash
+# Use the session ID (partial IDs work)
+chucky fetch abc12345
+
+# View what changed
+chucky diff abc12345
+
+# Apply changes
+chucky apply abc12345
+
+# Or do fetch + apply in one step
+chucky pull abc12345
+```
+
+See [Git Bundles](/cli/bundles) for detailed documentation.
+
+## Filtering by Project
+
+When run from a directory with a `.chucky.json` file, sessions are automatically filtered to that project. To see all sessions across projects, run the command from outside any Chucky project directory.
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Git Bundles" icon="code-branch" href="/cli/bundles">
+    Fetch and apply session changes
+  </Card>
+  <Card title="Jobs" icon="clock" href="/cli/jobs">
+    Create background jobs
+  </Card>
+</CardGroup>

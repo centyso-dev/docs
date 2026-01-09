@@ -30,6 +30,8 @@ You'll be prompted to enter your API key (found in [app.chucky.cloud](https://ap
 
 ## Commands
 
+### Core Commands
+
 | Command | Description |
 |---------|-------------|
 | `chucky login` | Authenticate with your Chucky account |
@@ -40,6 +42,32 @@ You'll be prompted to enter your API key (found in [app.chucky.cloud](https://ap
 | `chucky prompt` | Send prompts to any project |
 | `chucky config anthropic` | Set Anthropic API key for a project |
 | `chucky delete` | Delete a project |
+
+### Jobs (Background Tasks)
+
+| Command | Description |
+|---------|-------------|
+| `chucky jobs create` | Create a new background job |
+| `chucky jobs list` | List recent jobs |
+| `chucky jobs get` | Get details of a specific job |
+| `chucky jobs cancel` | Cancel a running job |
+
+### Sessions & History
+
+| Command | Description |
+|---------|-------------|
+| `chucky sessions` | List session history |
+
+### Git Bundles (Sync Changes)
+
+| Command | Description |
+|---------|-------------|
+| `chucky fetch` | Download changes to a local branch |
+| `chucky diff` | View pending changes |
+| `chucky log` | View commit history |
+| `chucky apply` | Apply changes to working directory |
+| `chucky discard` | Remove fetched branch |
+| `chucky pull` | Fetch + apply in one step |
 
 ## Quick Examples
 
@@ -74,7 +102,16 @@ The `--allow-possession` flag is a powerful feature that lets Claude execute com
   <Card title="Prompt Command" icon="terminal" href="/cli/prompt">
     All options for the prompt command
   </Card>
-  <Card title="Cron Jobs" icon="clock" href="/cli/cron">
+  <Card title="Jobs" icon="clock" href="/cli/jobs">
+    Create background tasks
+  </Card>
+  <Card title="Git Bundles" icon="code-branch" href="/cli/bundles">
+    Fetch and apply changes
+  </Card>
+  <Card title="Sessions" icon="list" href="/cli/sessions">
+    View session history
+  </Card>
+  <Card title="Cron Jobs" icon="calendar" href="/cli/cron">
     Schedule recurring prompts
   </Card>
   <Card title="Possession Mode" icon="ghost" href="/cli/possession">

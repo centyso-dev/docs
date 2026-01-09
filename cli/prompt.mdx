@@ -31,6 +31,7 @@ If you're in a directory with a `.chucky.json` file (created by `chucky init`), 
 | `--dangerously-skip-permissions` | Bypass all permission checks | `false` |
 | `--max-turns <n>` | Maximum conversation turns | - |
 | `--allow-possession` | Enable host tools (Claude controls your machine) | `false` |
+| `--apply` | Automatically apply file changes when complete | `false` |
 
 ## Examples
 
@@ -69,6 +70,16 @@ For programmatic use, get each event as JSON:
 ```bash
 chucky prompt "Generate a story" --project my-project --output-format stream-json
 ```
+
+### Auto-Apply Changes
+
+Automatically fetch and apply file changes when the session completes:
+
+```bash
+chucky prompt "Add input validation to the user registration form" --apply
+```
+
+This is equivalent to running the prompt, then `chucky pull <session-id>`. The changes are applied to your working directory and a branch is created for reference.
 
 ### Reading from Stdin
 

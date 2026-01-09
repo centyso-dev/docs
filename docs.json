@@ -34,6 +34,9 @@
             "pages": [
               "cli/index",
               "cli/prompt",
+              "cli/jobs",
+              "cli/bundles",
+              "cli/sessions",
               "cli/cron",
               "cli/possession"
             ]
