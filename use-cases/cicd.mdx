@@ -17,11 +17,11 @@ Automated workflows that:
 
 ```mermaid
 flowchart LR
-    trigger["Git Push\nPR Created"]
-    runner["CI/CD Runner\n(GitHub/GitLab)"]
-    cloud["Chucky Cloud\n\nClaude reviews code,\ngenerates suggestions"]
-    comment["PR Comment\nor Annotation"]
-    commit["Commit Changes\nor Create PR"]
+    trigger["Git Push / PR Created"]
+    runner["CI/CD Runner"]
+    cloud["Chucky Cloud"]
+    comment["PR Comment"]
+    commit["Commit Changes"]
 
     trigger --> runner --> cloud
     runner --> comment

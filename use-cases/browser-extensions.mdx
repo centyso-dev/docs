@@ -18,18 +18,18 @@ A browser extension that:
 ```mermaid
 flowchart TB
     subgraph browser["BROWSER"]
-        popup["Popup\nUser types 'Extract emails'"]
-        content["Content Script\nTool handlers"]
-        page["Web Page\nDOM manipulation"]
+        popup["Popup"]
+        content["Content Script"]
+        page["Web Page"]
 
         popup --> content
         content <--> page
     end
 
-    sdk["Chucky SDK (WebSocket)"]
+    sdk["Chucky SDK"]
 
     subgraph cloud["CHUCKY CLOUD"]
-        claude["Claude receives: page content + user request + tool definitions\nClaude responds: text + tool calls (executed in browser)"]
+        claude["Claude + Tools"]
     end
 
     popup --> sdk

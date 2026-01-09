@@ -20,12 +20,12 @@ A platform that:
 flowchart TB
     subgraph platform["YOUR PLATFORM"]
         subgraph clients["Clients"]
-            clientA["Client A\n(Acme Co)"]
-            clientB["Client B\n(Beta Inc)"]
-            clientC["Client C\n(Gamma)"]
+            clientA["Client A"]
+            clientB["Client B"]
+            clientC["Client C"]
         end
 
-        backend["YOUR BACKEND\n\n• User authentication\n• Subscription tier lookup\n• Token generation with budgets\n• Usage dashboard"]
+        backend["Your Backend"]
 
         clientA --> backend
         clientB --> backend
@@ -35,7 +35,7 @@ flowchart TB
     jwt["JWT with budget"]
 
     subgraph cloud["CHUCKY CLOUD"]
-        services["• Validates JWT signature\n• Enforces budget limits at edge\n• Tracks usage per user\n• Reports costs back to you"]
+        services["Budget Enforcement"]
     end
 
     backend --> jwt --> cloud

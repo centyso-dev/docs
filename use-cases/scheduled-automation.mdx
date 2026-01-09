@@ -17,11 +17,11 @@ Automated scheduled tasks that:
 
 ```mermaid
 flowchart LR
-    cron["Cron Trigger\n(scheduled)\n\n0 9 * * 1-5\n(9am weekdays)"]
-    cloud["Chucky Cloud\n\nLoads workspace\nRuns prompt\nIn sandbox"]
-    webhook["Your Webhook\n(optional)\n\nReceives result\nPosts to Slack\nCreates issue"]
+    cron["Cron Trigger"]
+    cloud["Chucky Cloud"]
+    webhook["Your Webhook"]
 
-    cron --> cloud --> webhook
+    cron -->|"0 9 * * 1-5"| cloud -->|"Result"| webhook
 ```
 
 ## Configuration

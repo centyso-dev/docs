@@ -186,11 +186,11 @@ Possession mode is powerful but potentially dangerous. Consider these precaution
 
 ```mermaid
 flowchart LR
-    machine["Your Machine\n(CLI + Tools)\n\nHost Tools\nExecute Here"]
-    sandbox["Chucky Sandbox\n(WebSocket Hub)\n\nClaude Code\nOrchestrates"]
-    api["Claude API\n(Anthropic)"]
+    machine["Your Machine"]
+    sandbox["Chucky Sandbox"]
+    api["Claude API"]
 
-    machine <-->|"WebSocket\nTool Results"| sandbox
+    machine <-->|"WebSocket"| sandbox
     sandbox <-->|"API Call"| api
 ```
 

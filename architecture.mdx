@@ -17,22 +17,30 @@ flowchart TB
         mobile["Mobile App"]
     end
 
-    sdk["Chucky SDK (WebSocket)"]
+    sdk["Chucky SDK"]
 
-    subgraph cloud["CHUCKY CLOUD (Edge)"]
-        auth["Auth & Budget\nEnforcement\n\n• JWT validation\n• Budget tracking\n• Rate limiting\n• Usage metering"]
-        session["Session\nManagement\n\n• Multi-turn state\n• Context management\n• Session persistence\n• Resume/fork"]
-        sandbox["Sandbox\nExecution\n\n• Isolated container\n• File system access\n• Shell execution\n• Git integration"]
+    subgraph cloud["CHUCKY CLOUD"]
+        auth["Auth & Budget"]
+        session["Session Mgmt"]
+        sandbox["Sandbox"]
 
         auth --> session --> sandbox
     end
 
-    anthropic["ANTHROPIC API\nClaude Sonnet / Opus / Haiku"]
+    anthropic["Anthropic API"]
 
     app --> sdk
     sdk --> cloud
     sandbox --> anthropic
 ```
+
+**Chucky Cloud components:**
+
+| Component | Responsibilities |
+|-----------|-----------------|
+| **Auth & Budget** | JWT validation, budget tracking, rate limiting, usage metering |
+| **Session Mgmt** | Multi-turn state, context management, persistence, resume/fork |
+| **Sandbox** | Isolated container, file system access, shell execution, git integration |
 
 ## Request Flow
 

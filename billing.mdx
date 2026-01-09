@@ -63,12 +63,12 @@ Data transferred out of Chucky's network:
 
 ```mermaid
 flowchart LR
-    server["Your Server\n\nCreates token\nwith budget:\n$5/day"]
-    edge["Chucky Edge\n\nValidates JWT\nChecks budget\nTracks usage"]
-    request["Request\n\nAllowed if\nwithin budget\n\nRejected if\nover budget"]
+    server["Your Server"]
+    edge["Chucky Edge"]
+    request["Request"]
 
-    server --> edge --> request
-    request -.-> edge
+    server -->|"JWT + budget"| edge -->|"Validate"| request
+    request -.->|"Track usage"| edge
 ```
 
 ### Setting Budgets
