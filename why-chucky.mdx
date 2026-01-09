@@ -1,0 +1,205 @@
+---
+title: Why Chucky?
+description: Why developers choose Chucky over direct API access
+---
+
+# Why Chucky?
+
+You can call the Anthropic API directly. So why use Chucky?
+
+## The Problem
+
+Building AI features into your product sounds simple: call the API, get a response, show it to users. But once you ship, reality hits:
+
+### 1. The Billing Problem
+
+Your AI costs explode. One user runs 50 prompts in a loop. Another pastes their entire codebase. You're paying for API calls you can't control.
+
+**What you need to build:**
+- Usage tracking per user
+- Budget limits and enforcement
+- Real-time cost monitoring
+- Stripe metering integration
+- Usage-based billing logic
+
+**Time to build:** 2-4 weeks
+
+### 2. The Execution Problem
+
+Users want AI that *does things* - not just generates text. They want code that runs, files that save, commands that execute.
+
+**What you need to build:**
+- Sandboxed execution environment
+- File system isolation
+- Process management
+- Security boundaries
+- Resource limits
+
+**Time to build:** 4-8 weeks
+
+### 3. The Tool Problem
+
+Claude can call tools, but those tools need to execute somewhere. In the browser? On your server? On the user's machine?
+
+**What you need to build:**
+- Tool execution routing
+- Browser-to-server communication
+- State management
+- Error handling
+- Retry logic
+
+**Time to build:** 2-4 weeks
+
+### 4. The Session Problem
+
+Multi-turn conversations need state. Context windows fill up. Users want to resume where they left off.
+
+**What you need to build:**
+- Session persistence
+- Context management
+- Message history storage
+- Resume/fork logic
+
+**Time to build:** 1-2 weeks
+
+---
+
+## The Chucky Solution
+
+Chucky handles all of this with one SDK and one deployment:
+
+```typescript
+// That's it. Billing, execution, tools, sessions - all handled.
+const client = new ChuckyClient({ token });
+const result = await client.prompt('Deploy my code to production');
+```
+
+### Built-in Per-User Billing
+
+JWT tokens carry budgets. Enforcement happens at the edge. No metering code.
+
+```typescript
+const token = await createToken({
+  userId: 'user-123',
+  budget: createBudget({
+    aiDollars: 5.00,    // User can spend up to $5
+    computeHours: 1,    // And 1 hour of compute
+    window: 'day',      // Resets daily
+  }),
+});
+```
+
+When the budget runs out, requests stop. No surprise bills. No runaway costs.
+
+### Managed Sandbox Execution
+
+Your workspace runs in an isolated container with:
+- Full file system access
+- Shell command execution
+- Git integration
+- Your entire codebase loaded
+
+Claude doesn't just generate code - it runs it, tests it, and iterates.
+
+### Flexible Tool Execution
+
+Define tools that run anywhere:
+
+```typescript
+// This tool runs in the browser (DOM access)
+const browserTool = {
+  name: 'highlight_element',
+  handler: async ({ selector }) => {
+    document.querySelector(selector).style.background = 'yellow';
+    return textResult('Highlighted');
+  }
+};
+
+// This tool runs on user's machine (possession mode)
+// HostBash, HostRead, HostWrite execute locally
+await session.send('Fix all TypeScript errors', {
+  allowPossession: true
+});
+```
+
+### Automatic Session Management
+
+Multi-turn conversations just work:
+
+```typescript
+const session = client.createSession();
+
+await session.send('Create a React component for user profiles');
+// Claude creates the component
+
+await session.send('Add form validation');
+// Claude remembers context, modifies the same file
+
+await session.send('Write tests');
+// Claude knows exactly what to test
+```
+
+---
+
+## Comparison
+
+| Capability | Direct API | Chucky |
+|------------|-----------|--------|
+| Per-user billing | Build it yourself | Built-in |
+| Budget enforcement | Build it yourself | Automatic |
+| Code execution | Build it yourself | Managed sandbox |
+| File operations | Not available | Full access |
+| Shell commands | Not available | Full access |
+| Browser tools | Build it yourself | Native support |
+| Local execution | Build it yourself | Possession mode |
+| Session persistence | Build it yourself | Automatic |
+| Multi-turn context | Build it yourself | Automatic |
+| Git integration | Build it yourself | Built-in bundles |
+
+---
+
+## Who Uses Chucky
+
+### Agencies Billing Clients
+
+Deploy once, bill each client automatically. JWT tokens carry per-client budgets. No custom metering code per project.
+
+### SaaS Teams Adding AI
+
+Add AI features without building infrastructure. Set budgets per subscription tier. Ship in days, not months.
+
+### Indie Developers
+
+One SDK, one deployment. Focus on your product, not on building AI infrastructure.
+
+---
+
+## What You Get
+
+<CardGroup cols={2}>
+  <Card title="Zero Infrastructure" icon="server">
+    No servers to manage. No containers to orchestrate. No scaling to worry about.
+  </Card>
+  <Card title="Predictable Costs" icon="wallet">
+    Set budgets, enforce limits. Know exactly what each user costs you.
+  </Card>
+  <Card title="Real Execution" icon="terminal">
+    AI that runs code, not just generates it. Full file and shell access.
+  </Card>
+  <Card title="Ship Faster" icon="rocket">
+    Weeks of infrastructure work, handled. Focus on your product.
+  </Card>
+</CardGroup>
+
+---
+
+## Get Started
+
+<CardGroup cols={2}>
+  <Card title="Quickstart" icon="play" href="/quickstart">
+    Deploy your first AI agent in 5 minutes
+  </Card>
+  <Card title="Architecture" icon="sitemap" href="/architecture">
+    Understand how Chucky works
+  </Card>
+</CardGroup>

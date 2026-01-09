@@ -1,0 +1,101 @@
+---
+title: Use Cases
+description: Practical guides for building with Chucky
+---
+
+# Use Cases
+
+These guides walk through real-world applications of Chucky, from AI-powered CLI tools to browser extensions and white-label platforms.
+
+## Featured Use Cases
+
+<CardGroup cols={2}>
+  <Card title="AI CLI Tools" icon="terminal" href="/use-cases/cli-tools">
+    Build command-line tools with Possession Mode - Claude reasons in the cloud while tools execute on the user's machine.
+  </Card>
+  <Card title="Browser Extensions" icon="chrome" href="/use-cases/browser-extensions">
+    Create Chrome/Firefox extensions where Claude reads pages, extracts data, and manipulates the DOM.
+  </Card>
+  <Card title="White-Label Platform" icon="building" href="/use-cases/white-label">
+    Deploy once, bill each client automatically with per-user budgets and usage tracking.
+  </Card>
+  <Card title="CI/CD Integration" icon="git-branch" href="/use-cases/cicd">
+    Add AI to your pipeline for PR reviews, changelog generation, and automated refactoring.
+  </Card>
+  <Card title="Scheduled Automation" icon="clock" href="/use-cases/scheduled-automation">
+    Set up cron jobs for nightly audits, weekly reports, and recurring AI tasks.
+  </Card>
+</CardGroup>
+
+## Quick Examples
+
+### AI Dev Automation
+
+```bash
+# Fix TypeScript errors with local execution
+chucky prompt "Fix all TypeScript errors" --allow-possession
+
+# Review and refactor
+chucky prompt "Review this file for security issues" --apply
+```
+
+### Browser Control
+
+```typescript
+// Tools that manipulate the page
+const extractTool = {
+  name: 'extract_data',
+  handler: async ({ selector }) => {
+    const data = document.querySelector(selector)?.textContent;
+    return textResult(data || 'Not found');
+  }
+};
+```
+
+### Per-User Billing
+
+```typescript
+// Token with embedded budget
+const token = await createToken({
+  userId: user.id,
+  budget: createBudget({ aiDollars: 5, computeHours: 1, window: 'day' }),
+});
+```
+
+### Scheduled Tasks
+
+```json
+// .chucky.json
+{
+  "crons": [{
+    "cron": "0 9 * * 1-5",
+    "message": "Review open PRs and suggest improvements"
+  }]
+}
+```
+
+---
+
+## What Makes These Different
+
+These aren't just AI features - they're applications that require Chucky's unique architecture:
+
+| Capability | Why Chucky |
+|------------|-----------|
+| **Local execution** | Possession Mode lets Claude reason in the cloud but execute on user's machine |
+| **Browser tools** | Same SDK runs in browser with DOM access |
+| **Auto billing** | JWT tokens carry budgets, enforced at edge |
+| **Scheduled AI** | Managed cron infrastructure with full sandbox |
+| **CI/CD AI** | Background jobs with webhook callbacks |
+
+---
+
+## Getting Started
+
+Each guide includes:
+- **Complete code examples** - Copy-paste ready
+- **Architecture overview** - How the pieces fit together
+- **Best practices** - Production-ready patterns
+- **Common pitfalls** - What to avoid
+
+Choose a use case above to get started, or explore the [Quickstart](/quickstart) for a general introduction.

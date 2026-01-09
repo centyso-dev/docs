@@ -1,0 +1,523 @@
+---
+title: MCP Servers
+description: Connect Claude to tools, databases, and external services
+---
+
+# MCP Servers
+
+MCP (Model Context Protocol) servers let you bundle multiple tools together and connect Claude to external services. The Chucky SDK supports several types of MCP servers.
+
+## Overview
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                        MCP SERVER TYPES                             │
+├─────────────────┬─────────────────┬─────────────────┬───────────────┤
+│  Client Tools   │  Stdio Server   │   SSE Server    │  HTTP Server  │
+│  (SDK-defined)  │  (subprocess)   │  (streaming)    │  (REST API)   │
+├─────────────────┼─────────────────┼─────────────────┼───────────────┤
+│ • Runs in your  │ • External      │ • Server-Sent   │ • REST API    │
+│   app process   │   process       │   Events        │   endpoint    │
+│ • Full access   │ • stdio comm    │ • Real-time     │ • Stateless   │
+│   to app state  │ • Any language  │   updates       │ • Any backend │
+└─────────────────┴─────────────────┴─────────────────┴───────────────┘
+```
+
+## Client Tools (Most Common)
+
+Tools that run directly in your application, with handlers you define:
+
+```typescript
+import { McpServerBuilder, textResult, errorResult } from '@chucky.cloud/sdk';
+
+const myServer = new McpServerBuilder('my-tools', '1.0.0')
+  .addTool({
+    name: 'search_database',
+    description: 'Search the database for records',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        query: { type: 'string', description: 'Search query' },
+        limit: { type: 'number', description: 'Max results' },
+      },
+      required: ['query'],
+    },
+    handler: async ({ query, limit = 10 }) => {
+      const results = await db.search(query, limit);
+      return textResult(JSON.stringify(results, null, 2));
+    },
+  })
+  .addTool({
+    name: 'update_record',
+    description: 'Update a database record',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        id: { type: 'string' },
+        data: { type: 'object' },
+      },
+      required: ['id', 'data'],
+    },
+    handler: async ({ id, data }) => {
+      try {
+        await db.update(id, data);
+        return textResult(`Updated record ${id}`);
+      } catch (err) {
+        return errorResult(`Failed to update: ${err.message}`);
+      }
+    },
+  })
+  .build();
+
+const session = client.createSession({
+  mcpServers: [myServer],
+});
+```
+
+### When to Use
+
+- Tools that need access to your app's state
+- Browser tools (DOM manipulation)
+- Tools that call your own APIs
+- Simple integrations
+
+---
+
+## Stdio Servers
+
+External processes that communicate via stdin/stdout. Great for using existing MCP servers or tools written in other languages.
+
+```typescript
+const session = client.createSession({
+  mcpServers: [
+    {
+      type: 'stdio',
+      name: 'filesystem',
+      command: 'npx',
+      args: ['-y', '@anthropic/mcp-server-filesystem', '/path/to/allowed'],
+    },
+    {
+      type: 'stdio',
+      name: 'github',
+      command: 'npx',
+      args: ['-y', '@anthropic/mcp-server-github'],
+      env: {
+        GITHUB_TOKEN: process.env.GITHUB_TOKEN,
+      },
+    },
+  ],
+});
+```
+
+### Configuration Options
+
+```typescript
+interface StdioMcpServer {
+  type: 'stdio';
+  name: string;
+  command: string;           // Executable to run
+  args?: string[];           // Command arguments
+  env?: Record<string, string>;  // Environment variables
+  cwd?: string;              // Working directory
+}
+```
+
+### When to Use
+
+- Using existing MCP servers from the ecosystem
+- Tools written in Python, Go, Rust, etc.
+- Complex tools that benefit from process isolation
+- Tools with heavy dependencies
+
+### Available MCP Servers
+
+Popular pre-built servers:
+
+| Server | Description |
+|--------|-------------|
+| `@anthropic/mcp-server-filesystem` | File system access |
+| `@anthropic/mcp-server-github` | GitHub API integration |
+| `@anthropic/mcp-server-postgres` | PostgreSQL database |
+| `@anthropic/mcp-server-sqlite` | SQLite database |
+| `@anthropic/mcp-server-brave` | Brave search |
+| `@anthropic/mcp-server-fetch` | HTTP fetching |
+
+---
+
+## SSE Servers
+
+Connect to Server-Sent Events endpoints for real-time streaming tools:
+
+```typescript
+const session = client.createSession({
+  mcpServers: [
+    {
+      type: 'sse',
+      name: 'live-data',
+      url: 'https://api.example.com/mcp/sse',
+      headers: {
+        'Authorization': `Bearer ${apiToken}`,
+      },
+    },
+  ],
+});
+```
+
+### Configuration Options
+
+```typescript
+interface SseMcpServer {
+  type: 'sse';
+  name: string;
+  url: string;               // SSE endpoint URL
+  headers?: Record<string, string>;  // HTTP headers
+}
+```
+
+### When to Use
+
+- Real-time data sources
+- Long-running connections
+- Server-push updates
+- Live monitoring tools
+
+---
+
+## HTTP Servers
+
+Connect to REST API endpoints:
+
+```typescript
+const session = client.createSession({
+  mcpServers: [
+    {
+      type: 'http',
+      name: 'api-tools',
+      url: 'https://api.example.com/mcp',
+      headers: {
+        'Authorization': `Bearer ${apiToken}`,
+        'Content-Type': 'application/json',
+      },
+    },
+  ],
+});
+```
+
+### Configuration Options
+
+```typescript
+interface HttpMcpServer {
+  type: 'http';
+  name: string;
+  url: string;               // Base URL for API
+  headers?: Record<string, string>;  // HTTP headers
+}
+```
+
+### When to Use
+
+- Existing REST APIs
+- Serverless functions
+- Third-party integrations
+- Stateless tools
+
+---
+
+## Combining Multiple Servers
+
+Use multiple MCP servers together:
+
+```typescript
+const session = client.createSession({
+  mcpServers: [
+    // Your custom tools
+    customToolServer,
+
+    // File system access
+    {
+      type: 'stdio',
+      name: 'filesystem',
+      command: 'npx',
+      args: ['-y', '@anthropic/mcp-server-filesystem', './'],
+    },
+
+    // Database access
+    {
+      type: 'stdio',
+      name: 'database',
+      command: 'npx',
+      args: ['-y', '@anthropic/mcp-server-postgres'],
+      env: {
+        POSTGRES_URL: process.env.DATABASE_URL,
+      },
+    },
+
+    // External API
+    {
+      type: 'http',
+      name: 'external-api',
+      url: 'https://api.example.com/mcp',
+      headers: {
+        'Authorization': `Bearer ${process.env.API_KEY}`,
+      },
+    },
+  ],
+});
+```
+
+---
+
+## Tool Naming
+
+When using MCP servers, tools are namespaced:
+
+```
+mcp__<server-name>__<tool-name>
+```
+
+For example:
+
+```typescript
+const server = new McpServerBuilder('my-tools', '1.0.0')
+  .addTool({ name: 'search', ... })
+  .build();
+
+// Tool is available as: mcp__my-tools__search
+```
+
+Claude uses the full name internally, but you can reference tools by their short name in `allowedTools` and `disallowedTools`:
+
+```typescript
+const session = client.createSession({
+  mcpServers: [server],
+  allowedTools: ['mcp__my-tools__search'],  // Full name
+  // or
+  allowedTools: ['search'],  // Short name also works
+});
+```
+
+---
+
+## Building an MCP Server
+
+### Simple Server
+
+```typescript
+import { McpServerBuilder, textResult, errorResult, imageResult } from '@chucky.cloud/sdk';
+
+const server = new McpServerBuilder('analytics', '1.0.0')
+  .addTool({
+    name: 'get_metrics',
+    description: 'Get analytics metrics for a date range',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        startDate: { type: 'string', format: 'date' },
+        endDate: { type: 'string', format: 'date' },
+        metrics: {
+          type: 'array',
+          items: { type: 'string', enum: ['pageviews', 'users', 'sessions'] },
+        },
+      },
+      required: ['startDate', 'endDate'],
+    },
+    handler: async ({ startDate, endDate, metrics = ['pageviews'] }) => {
+      const data = await analytics.query({ startDate, endDate, metrics });
+      return textResult(JSON.stringify(data, null, 2));
+    },
+  })
+  .addTool({
+    name: 'generate_report',
+    description: 'Generate a visual report',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        type: { type: 'string', enum: ['daily', 'weekly', 'monthly'] },
+      },
+      required: ['type'],
+    },
+    handler: async ({ type }) => {
+      const chart = await analytics.generateChart(type);
+      return imageResult(chart.base64, 'image/png');
+    },
+  })
+  .build();
+```
+
+### With Zod Schemas
+
+```typescript
+import { z } from 'zod';
+import { McpServerBuilder, textResult } from '@chucky.cloud/sdk';
+
+const SearchInputSchema = z.object({
+  query: z.string().describe('Search query'),
+  filters: z.object({
+    category: z.string().optional(),
+    minPrice: z.number().optional(),
+    maxPrice: z.number().optional(),
+  }).optional(),
+  limit: z.number().min(1).max(100).default(10),
+});
+
+const server = new McpServerBuilder('ecommerce', '1.0.0')
+  .addTool({
+    name: 'search_products',
+    description: 'Search for products in the catalog',
+    inputSchema: SearchInputSchema,  // Zod schema auto-converts
+    handler: async (input) => {
+      const products = await catalog.search(input);
+      return textResult(JSON.stringify(products));
+    },
+  })
+  .build();
+```
+
+---
+
+## Error Handling
+
+Always handle errors in tool handlers:
+
+```typescript
+handler: async (input) => {
+  try {
+    const result = await riskyOperation(input);
+    return textResult(result);
+  } catch (err) {
+    // Return error to Claude so it can respond appropriately
+    return errorResult(`Operation failed: ${err.message}`);
+  }
+}
+```
+
+Claude will see the error and can:
+- Try a different approach
+- Ask for clarification
+- Report the issue to the user
+
+---
+
+## Result Types
+
+### Text Result
+
+```typescript
+import { textResult } from '@chucky.cloud/sdk';
+
+return textResult('Operation completed successfully');
+return textResult(JSON.stringify(data, null, 2));
+```
+
+### Error Result
+
+```typescript
+import { errorResult } from '@chucky.cloud/sdk';
+
+return errorResult('File not found');
+return errorResult('Invalid input: expected number');
+```
+
+### Image Result
+
+```typescript
+import { imageResult } from '@chucky.cloud/sdk';
+
+return imageResult(base64Data, 'image/png');
+return imageResult(base64Data, 'image/jpeg');
+```
+
+### Multi-Content Result
+
+```typescript
+return {
+  content: [
+    { type: 'text', text: 'Here is the chart:' },
+    { type: 'image', data: base64Chart, mimeType: 'image/png' },
+    { type: 'text', text: 'Generated at ' + new Date().toISOString() },
+  ],
+};
+```
+
+---
+
+## Best Practices
+
+### 1. Clear Descriptions
+
+Help Claude understand when to use each tool:
+
+```typescript
+// Good
+description: 'Search for products by name, category, or price range. Returns up to 10 results with name, price, and availability.'
+
+// Bad
+description: 'Search products'
+```
+
+### 2. Validate Inputs
+
+Don't trust input from Claude blindly:
+
+```typescript
+handler: async ({ id }) => {
+  if (!id || typeof id !== 'string') {
+    return errorResult('Invalid ID provided');
+  }
+  // ...
+}
+```
+
+### 3. Limit Output Size
+
+Claude has context limits:
+
+```typescript
+handler: async () => {
+  const results = await db.query();
+  // Limit results
+  const limited = results.slice(0, 50);
+  return textResult(JSON.stringify(limited));
+}
+```
+
+### 4. Add Rate Limiting
+
+Prevent abuse:
+
+```typescript
+const rateLimiter = new Map();
+
+handler: async (input) => {
+  const key = `${input.userId}:search`;
+  const count = rateLimiter.get(key) || 0;
+
+  if (count > 10) {
+    return errorResult('Rate limit exceeded. Try again later.');
+  }
+
+  rateLimiter.set(key, count + 1);
+  setTimeout(() => rateLimiter.delete(key), 60000);
+
+  // Continue with operation...
+}
+```
+
+---
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Tools" icon="wrench" href="/concepts/tools">
+    Tool basics and creation
+  </Card>
+  <Card title="Sessions" icon="comments" href="/concepts/sessions">
+    Multi-turn conversations
+  </Card>
+  <Card title="Session Options" icon="sliders" href="/sdk/javascript/options">
+    Complete options reference
+  </Card>
+  <Card title="Error Handling" icon="triangle-exclamation" href="/advanced/error-handling">
+    Handle errors gracefully
+  </Card>
+</CardGroup>

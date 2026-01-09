@@ -1,0 +1,333 @@
+---
+title: Billing & Pricing
+description: Understanding Chucky costs and pricing
+---
+
+# Billing & Pricing
+
+Understand how Chucky pricing works, what you're charged for, and how to optimize costs.
+
+## Pricing Tiers
+
+| Plan | Monthly | Compute | Egress | Concurrent Sessions |
+|------|---------|---------|--------|---------------------|
+| **Hobby** | $5 | ~125 hours | 10 GB | 2 |
+| **Starter** | $29 | ~725 hours | 50 GB | 5 |
+| **Pro** | $99 | ~2,475 hours | 200 GB | 10 |
+| **Enterprise** | Custom | Custom | Custom | Custom |
+
+### Overage Pricing
+
+When you exceed plan limits:
+
+| Resource | Overage Rate |
+|----------|--------------|
+| Compute | $0.04/hour |
+| Egress | $0.03/GB |
+
+---
+
+## What You're Charged For
+
+### 1. AI Costs (Pass-Through)
+
+Claude API costs are passed through at Anthropic's rates. You pay exactly what Anthropic charges.
+
+| Model | Input (per 1M tokens) | Output (per 1M tokens) |
+|-------|----------------------|------------------------|
+| Claude Sonnet 4.5 | $3.00 | $15.00 |
+| Claude Opus 4.5 | $15.00 | $75.00 |
+| Claude 3.5 Haiku | $0.25 | $1.25 |
+
+**Note:** Use your own Anthropic API key for direct billing to Anthropic, or use Chucky's pooled access.
+
+### 2. Compute Time
+
+Time your sandbox is running, measured in seconds.
+
+- **Starts** when session begins
+- **Ends** when session completes
+- **Includes** tool execution, file operations, shell commands
+
+### 3. Egress
+
+Data transferred out of Chucky's network:
+
+- Git bundle downloads
+- Large response payloads
+- File exports
+
+---
+
+## Budget Enforcement
+
+### How It Works
+
+```
+┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
+│   Your Server   │     │   Chucky Edge   │     │    Request      │
+│                 │     │                 │     │                 │
+│  Creates token  │────▶│  Validates JWT  │────▶│  Allowed if     │
+│  with budget:   │     │  Checks budget  │     │  within budget  │
+│  $5/day         │     │  for user       │     │                 │
+│                 │     │                 │     │  Rejected if    │
+│                 │     │  Tracks usage   │◀────│  over budget    │
+└─────────────────┘     └─────────────────┘     └─────────────────┘
+```
+
+### Setting Budgets
+
+```typescript
+const token = await createToken({
+  userId: 'user-123',
+  projectId: process.env.CHUCKY_PROJECT_ID,
+  secret: process.env.CHUCKY_HMAC_SECRET,
+  budget: createBudget({
+    aiDollars: 5.00,        // Max AI spend
+    computeHours: 1,        // Max compute time
+    window: 'day',          // Reset period
+  }),
+});
+```
+
+### Budget Windows
+
+| Window | Description |
+|--------|-------------|
+| `hour` | Resets every hour |
+| `day` | Resets every 24 hours |
+| `week` | Resets every 7 days |
+| `month` | Resets on billing anchor |
+
+### Budget Exceeded Response
+
+When budget is exceeded:
+
+```typescript
+import { BudgetExceededError } from '@chucky.cloud/sdk';
+
+try {
+  await session.send(message);
+} catch (err) {
+  if (err instanceof BudgetExceededError) {
+    // Handle gracefully
+    console.log('User budget exceeded');
+    // Show upgrade prompt
+  }
+}
+```
+
+---
+
+## Cost Tracking
+
+### Per-Request Costs
+
+Every response includes cost information:
+
+```typescript
+for await (const msg of session.stream()) {
+  if (msg.type === 'result') {
+    console.log('Cost:', msg.total_cost_usd);
+    console.log('Tokens:', msg.usage);
+    // {
+    //   input_tokens: 1500,
+    //   output_tokens: 800,
+    //   total_tokens: 2300
+    // }
+  }
+}
+```
+
+### Dashboard
+
+View usage in the portal at [app.chucky.cloud](https://app.chucky.cloud):
+
+- Total spend by period
+- Usage by project
+- Usage by user
+- Cost breakdown (AI vs compute)
+
+---
+
+## Optimizing Costs
+
+### 1. Choose the Right Model
+
+| Model | Speed | Cost | Best For |
+|-------|-------|------|----------|
+| Haiku | Fastest | Lowest | Simple tasks, high volume |
+| Sonnet | Fast | Medium | Most use cases |
+| Opus | Slowest | Highest | Complex reasoning |
+
+```typescript
+// Use Haiku for simple tasks
+const session = client.createSession({
+  model: 'claude-3-5-haiku-20241022',
+});
+
+// Use Opus only when needed
+const session = client.createSession({
+  model: 'claude-opus-4-5-20251101',
+});
+```
+
+### 2. Set Tight Budgets
+
+```typescript
+// Start conservative
+budget: createBudget({
+  aiDollars: 0.50,  // 50 cents
+  computeHours: 0.5, // 30 minutes
+  window: 'hour',
+})
+```
+
+### 3. Limit Turns
+
+```typescript
+const session = client.createSession({
+  maxTurns: 5,  // Prevent runaway conversations
+});
+```
+
+### 4. Use Efficient Prompts
+
+```typescript
+// Bad: Sends entire file every time
+await session.send(`Here's my code:\n${entireFile}\n\nFix the bug.`);
+
+// Good: Be specific
+await session.send('Fix the null pointer exception on line 42 of api.ts');
+```
+
+### 5. Cache When Possible
+
+For repeated queries, cache results:
+
+```typescript
+const cacheKey = hash(prompt);
+const cached = await cache.get(cacheKey);
+
+if (cached) {
+  return cached;
+}
+
+const result = await client.prompt(prompt);
+await cache.set(cacheKey, result, { ttl: 3600 });
+return result;
+```
+
+---
+
+## Billing for Your Users
+
+### Tiered Pricing
+
+```typescript
+const plans = {
+  free: { aiDollars: 0.50, computeHours: 0.5 },
+  pro: { aiDollars: 10, computeHours: 5 },
+  enterprise: { aiDollars: 100, computeHours: 50 },
+};
+
+const userPlan = plans[user.plan];
+
+const token = await createToken({
+  userId: user.id,
+  budget: createBudget({
+    aiDollars: userPlan.aiDollars,
+    computeHours: userPlan.computeHours,
+    window: 'month',
+    windowStart: user.billingCycleStart,
+  }),
+});
+```
+
+### Usage-Based Add-ons
+
+```typescript
+// Track usage
+const usage = await getMonthlyUsage(user.id);
+
+// Calculate overage
+const overage = Math.max(0, usage - plan.includedAmount);
+const overageCharge = overage * 1.2; // 20% markup
+
+// Add to invoice
+await billing.addCharge(user.id, {
+  description: 'AI Usage Overage',
+  amount: overageCharge,
+});
+```
+
+### Alerts
+
+Notify users before they hit limits:
+
+```typescript
+const usage = await getUsage(user.id);
+const percentUsed = (usage / budget) * 100;
+
+if (percentUsed > 80) {
+  await sendEmail(user, {
+    subject: 'AI Budget Alert',
+    body: `You've used ${percentUsed}% of your monthly AI budget.`,
+  });
+}
+```
+
+---
+
+## Billing FAQ
+
+### How am I billed?
+
+Monthly subscription + any overage charges. Invoices generated on billing cycle date.
+
+### Can I set hard limits?
+
+Yes, budget enforcement is hard. When exceeded, requests are rejected until the window resets or budget increases.
+
+### Do unused credits roll over?
+
+No, budget windows reset on schedule. Plan for typical usage, not worst case.
+
+### Can I use my own Anthropic API key?
+
+Yes, configure in project settings. AI costs go directly to your Anthropic account.
+
+### How is compute measured?
+
+From session start to session end, in seconds. Idle time within a session counts.
+
+### What counts as egress?
+
+Data leaving Chucky's network: bundle downloads, large responses, file exports. Regular API responses don't count.
+
+---
+
+## Getting Help
+
+- **Usage questions**: [support@chucky.cloud](mailto:support@chucky.cloud)
+- **Billing disputes**: [billing@chucky.cloud](mailto:billing@chucky.cloud)
+- **Enterprise pricing**: [sales@chucky.cloud](mailto:sales@chucky.cloud)
+
+---
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Budget Management" icon="wallet" href="/advanced/budget-management">
+    Advanced budget strategies
+  </Card>
+  <Card title="Authentication" icon="key" href="/authentication">
+    Token creation with budgets
+  </Card>
+  <Card title="White-Label" icon="building" href="/use-cases/white-label">
+    Billing your users
+  </Card>
+  <Card title="Dashboard" icon="chart-line" href="https://app.chucky.cloud">
+    View your usage
+  </Card>
+</CardGroup>

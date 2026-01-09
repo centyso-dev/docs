@@ -1,0 +1,522 @@
+---
+title: Browser Extensions
+description: Build Chrome/Firefox extensions with Claude
+---
+
+# Browser Extensions
+
+Build browser extensions where Claude can read pages, extract data, fill forms, and manipulate the DOM - all through natural language.
+
+## What You'll Build
+
+A browser extension that:
+- Lets users interact with Claude via popup or sidebar
+- Gives Claude access to the current page's content
+- Executes DOM manipulations based on Claude's decisions
+- Works across any website
+
+## Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                           BROWSER                                       │
+│  ┌─────────────┐    ┌─────────────┐    ┌─────────────────────────────┐ │
+│  │   Popup     │    │  Content    │    │        Web Page             │ │
+│  │             │    │   Script    │    │                             │ │
+│  │  User types │───▶│  Tool       │───▶│  DOM manipulation           │ │
+│  │  "Extract   │    │  handlers   │    │  document.querySelector()   │ │
+│  │   emails"   │    │             │◀───│  element.click()            │ │
+│  │             │    │             │    │  form.submit()              │ │
+│  └──────┬──────┘    └─────────────┘    └─────────────────────────────┘ │
+│         │                                                               │
+│         │ Chucky SDK (WebSocket)                                        │
+└─────────┼───────────────────────────────────────────────────────────────┘
+          │
+          ▼
+┌─────────────────────────────────────────────────────────────────────────┐
+│                        CHUCKY CLOUD                                     │
+│                                                                         │
+│   Claude receives: page content + user request + tool definitions       │
+│   Claude responds: text + tool calls (executed in browser)              │
+│                                                                         │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+## Quick Start
+
+### 1. Extension Structure
+
+```
+my-extension/
+├── manifest.json
+├── popup/
+│   ├── popup.html
+│   └── popup.js
+├── content/
+│   └── content.js
+├── background/
+│   └── service-worker.js
+└── lib/
+    └── chucky-sdk.js     # Bundled SDK
+```
+
+### 2. Manifest (Chrome MV3)
+
+```json
+{
+  "manifest_version": 3,
+  "name": "AI Page Assistant",
+  "version": "1.0.0",
+  "permissions": ["activeTab", "scripting"],
+  "action": {
+    "default_popup": "popup/popup.html"
+  },
+  "content_scripts": [{
+    "matches": ["<all_urls>"],
+    "js": ["content/content.js"]
+  }],
+  "background": {
+    "service_worker": "background/service-worker.js"
+  }
+}
+```
+
+### 3. Popup (User Interface)
+
+```html
+<!-- popup/popup.html -->
+<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    body { width: 350px; padding: 16px; font-family: system-ui; }
+    textarea { width: 100%; height: 80px; margin-bottom: 8px; }
+    button { width: 100%; padding: 8px; cursor: pointer; }
+    #response { margin-top: 16px; white-space: pre-wrap; }
+  </style>
+</head>
+<body>
+  <textarea id="prompt" placeholder="Ask about this page..."></textarea>
+  <button id="send">Send</button>
+  <div id="response"></div>
+  <script src="popup.js" type="module"></script>
+</body>
+</html>
+```
+
+```javascript
+// popup/popup.js
+import { ChuckyClient, getAssistantText } from '../lib/chucky-sdk.js';
+
+document.getElementById('send').addEventListener('click', async () => {
+  const prompt = document.getElementById('prompt').value;
+  const response = document.getElementById('response');
+  response.textContent = 'Thinking...';
+
+  // Get token from your server
+  const { token } = await fetch('https://your-api.com/token').then(r => r.json());
+
+  // Get page content from content script
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  const pageContent = await chrome.tabs.sendMessage(tab.id, { type: 'GET_PAGE' });
+
+  const client = new ChuckyClient({ token });
+  const session = client.createSession({
+    model: 'claude-sonnet-4-5-20250929',
+    systemPrompt: `You are a browser assistant. Current page content:
+
+${pageContent.text}
+
+URL: ${pageContent.url}
+Title: ${pageContent.title}`,
+    mcpServers: [{
+      name: 'browser-tools',
+      tools: browserTools,
+    }],
+  });
+
+  await session.send(prompt);
+
+  let result = '';
+  for await (const msg of session.stream()) {
+    if (msg.type === 'assistant') {
+      result += getAssistantText(msg) || '';
+      response.textContent = result;
+    }
+  }
+
+  session.close();
+});
+```
+
+### 4. Browser Tools
+
+```javascript
+// Define tools that execute in the browser
+const browserTools = [
+  {
+    name: 'get_page_content',
+    description: 'Get the full text content of the current page',
+    inputSchema: { type: 'object', properties: {} },
+    handler: async () => {
+      const content = await chrome.tabs.sendMessage(tab.id, { type: 'GET_CONTENT' });
+      return { content: [{ type: 'text', text: content }] };
+    },
+  },
+  {
+    name: 'extract_elements',
+    description: 'Extract text from elements matching a CSS selector',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        selector: { type: 'string', description: 'CSS selector' },
+      },
+      required: ['selector'],
+    },
+    handler: async ({ selector }) => {
+      const result = await chrome.tabs.sendMessage(tab.id, {
+        type: 'EXTRACT',
+        selector
+      });
+      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+    },
+  },
+  {
+    name: 'click_element',
+    description: 'Click an element on the page',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        selector: { type: 'string', description: 'CSS selector of element to click' },
+      },
+      required: ['selector'],
+    },
+    handler: async ({ selector }) => {
+      const result = await chrome.tabs.sendMessage(tab.id, {
+        type: 'CLICK',
+        selector
+      });
+      return { content: [{ type: 'text', text: result ? 'Clicked' : 'Element not found' }] };
+    },
+  },
+  {
+    name: 'fill_form',
+    description: 'Fill form fields with values',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        fields: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              selector: { type: 'string' },
+              value: { type: 'string' },
+            },
+          },
+        },
+      },
+      required: ['fields'],
+    },
+    handler: async ({ fields }) => {
+      const result = await chrome.tabs.sendMessage(tab.id, {
+        type: 'FILL_FORM',
+        fields
+      });
+      return { content: [{ type: 'text', text: `Filled ${result.filled} fields` }] };
+    },
+  },
+  {
+    name: 'highlight_elements',
+    description: 'Highlight elements matching a selector',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        selector: { type: 'string' },
+        color: { type: 'string', description: 'CSS color value' },
+      },
+      required: ['selector'],
+    },
+    handler: async ({ selector, color = 'yellow' }) => {
+      const result = await chrome.tabs.sendMessage(tab.id, {
+        type: 'HIGHLIGHT',
+        selector,
+        color
+      });
+      return { content: [{ type: 'text', text: `Highlighted ${result.count} elements` }] };
+    },
+  },
+];
+```
+
+### 5. Content Script
+
+```javascript
+// content/content.js
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  switch (message.type) {
+    case 'GET_PAGE':
+      sendResponse({
+        url: window.location.href,
+        title: document.title,
+        text: document.body.innerText.slice(0, 10000), // Limit size
+      });
+      break;
+
+    case 'GET_CONTENT':
+      sendResponse(document.body.innerText);
+      break;
+
+    case 'EXTRACT':
+      const elements = document.querySelectorAll(message.selector);
+      const texts = Array.from(elements).map(el => el.textContent.trim());
+      sendResponse(texts);
+      break;
+
+    case 'CLICK':
+      const clickEl = document.querySelector(message.selector);
+      if (clickEl) {
+        clickEl.click();
+        sendResponse(true);
+      } else {
+        sendResponse(false);
+      }
+      break;
+
+    case 'FILL_FORM':
+      let filled = 0;
+      for (const field of message.fields) {
+        const input = document.querySelector(field.selector);
+        if (input) {
+          input.value = field.value;
+          input.dispatchEvent(new Event('input', { bubbles: true }));
+          filled++;
+        }
+      }
+      sendResponse({ filled });
+      break;
+
+    case 'HIGHLIGHT':
+      const highlightEls = document.querySelectorAll(message.selector);
+      highlightEls.forEach(el => {
+        el.style.backgroundColor = message.color;
+        el.style.outline = `2px solid ${message.color}`;
+      });
+      sendResponse({ count: highlightEls.length });
+      break;
+  }
+  return true; // Keep channel open for async
+});
+```
+
+## Use Cases
+
+### Data Extraction
+
+```
+User: "Extract all email addresses from this page"
+Claude: *uses extract_elements tool with regex*
+Result: ["john@example.com", "jane@example.com", ...]
+```
+
+### Form Automation
+
+```
+User: "Fill out the contact form with my info"
+Claude: *uses fill_form tool*
+Result: Form fields populated
+```
+
+### Page Analysis
+
+```
+User: "What are the main topics discussed on this page?"
+Claude: *analyzes page content*
+Result: Summary of key topics
+```
+
+### Interactive Assistance
+
+```
+User: "Click the 'Load More' button until all results are shown"
+Claude: *uses click_element tool repeatedly*
+Result: All content loaded
+```
+
+## Advanced Features
+
+### Screenshot Tool
+
+```javascript
+{
+  name: 'take_screenshot',
+  description: 'Capture a screenshot of the visible page',
+  inputSchema: { type: 'object', properties: {} },
+  handler: async () => {
+    const dataUrl = await chrome.tabs.captureVisibleTab();
+    const base64 = dataUrl.split(',')[1];
+    return {
+      content: [{
+        type: 'image',
+        data: base64,
+        mimeType: 'image/png',
+      }],
+    };
+  },
+}
+```
+
+### Storage Tool
+
+```javascript
+{
+  name: 'save_data',
+  description: 'Save extracted data for later',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      key: { type: 'string' },
+      data: { type: 'object' },
+    },
+    required: ['key', 'data'],
+  },
+  handler: async ({ key, data }) => {
+    await chrome.storage.local.set({ [key]: data });
+    return { content: [{ type: 'text', text: `Saved to ${key}` }] };
+  },
+}
+```
+
+### Navigation Tool
+
+```javascript
+{
+  name: 'navigate',
+  description: 'Navigate to a URL',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      url: { type: 'string' },
+    },
+    required: ['url'],
+  },
+  handler: async ({ url }) => {
+    await chrome.tabs.update({ url });
+    return { content: [{ type: 'text', text: `Navigating to ${url}` }] };
+  },
+}
+```
+
+## Best Practices
+
+### 1. Token Security
+
+Never hardcode tokens in the extension. Fetch from your server:
+
+```javascript
+// Bad
+const token = 'jwt-token-here';
+
+// Good
+const { token } = await fetch('https://your-api.com/token', {
+  method: 'POST',
+  headers: { 'Authorization': `Bearer ${userToken}` },
+}).then(r => r.json());
+```
+
+### 2. Page Content Limits
+
+Don't send the entire page to Claude - it's expensive and often unnecessary:
+
+```javascript
+// Limit text content
+const text = document.body.innerText.slice(0, 10000);
+
+// Or extract relevant sections
+const mainContent = document.querySelector('main')?.innerText || '';
+```
+
+### 3. User Confirmation
+
+Ask before destructive actions:
+
+```javascript
+{
+  name: 'submit_form',
+  handler: async ({ selector }) => {
+    const confirmed = confirm('Submit this form?');
+    if (!confirmed) {
+      return { content: [{ type: 'text', text: 'User cancelled' }] };
+    }
+    // Submit form...
+  },
+}
+```
+
+### 4. Error Handling
+
+Handle tool failures gracefully:
+
+```javascript
+handler: async ({ selector }) => {
+  try {
+    const element = document.querySelector(selector);
+    if (!element) {
+      return {
+        content: [{ type: 'text', text: `No element found for: ${selector}` }],
+        isError: true,
+      };
+    }
+    // Do something with element...
+  } catch (err) {
+    return {
+      content: [{ type: 'text', text: `Error: ${err.message}` }],
+      isError: true,
+    };
+  }
+}
+```
+
+## Firefox Compatibility
+
+For Firefox, update the manifest:
+
+```json
+{
+  "manifest_version": 2,
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "your-extension@example.com"
+    }
+  },
+  "background": {
+    "scripts": ["background/background.js"]
+  }
+}
+```
+
+And use `browser.*` APIs instead of `chrome.*`:
+
+```javascript
+// Use webextension-polyfill for cross-browser compatibility
+import browser from 'webextension-polyfill';
+
+const tab = await browser.tabs.query({ active: true, currentWindow: true });
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Tools" icon="wrench" href="/concepts/tools">
+    Learn more about defining tools
+  </Card>
+  <Card title="Streaming" icon="signal-stream" href="/concepts/streaming">
+    Real-time response streaming
+  </Card>
+  <Card title="Error Handling" icon="triangle-exclamation" href="/advanced/error-handling">
+    Handle errors gracefully
+  </Card>
+  <Card title="Budget Management" icon="wallet" href="/advanced/budget-management">
+    Control costs per user
+  </Card>
+</CardGroup>

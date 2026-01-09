@@ -17,8 +17,10 @@
             "group": "Getting Started",
             "pages": [
               "index",
+              "why-chucky",
               "quickstart",
-              "authentication"
+              "authentication",
+              "architecture"
             ]
           },
           {
@@ -26,6 +28,7 @@
             "pages": [
               "concepts/sessions",
               "concepts/tools",
+              "concepts/mcp-servers",
               "concepts/streaming"
             ]
           },
@@ -37,8 +40,20 @@
               "cli/jobs",
               "cli/bundles",
               "cli/sessions",
+              "cli/deployment",
               "cli/cron",
               "cli/possession"
+            ]
+          },
+          {
+            "group": "Use Cases",
+            "pages": [
+              "use-cases/index",
+              "use-cases/cli-tools",
+              "use-cases/browser-extensions",
+              "use-cases/white-label",
+              "use-cases/cicd",
+              "use-cases/scheduled-automation"
             ]
           },
           {
@@ -46,7 +61,8 @@
             "pages": [
               "advanced/error-handling",
               "advanced/budget-management",
-              "advanced/workspace"
+              "advanced/workspace",
+              "billing"
             ]
           }
         ]
@@ -59,6 +75,7 @@
             "pages": [
               "sdk/javascript/client",
               "sdk/javascript/session",
+              "sdk/javascript/options",
               "sdk/javascript/types"
             ]
           },

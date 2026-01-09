@@ -1,0 +1,574 @@
+---
+title: Session Options
+description: Complete reference for SDK session configuration
+---
+
+# Session Options
+
+Complete reference for all options available when creating sessions with the Chucky SDK.
+
+## Quick Reference
+
+```typescript
+const session = client.createSession({
+  // Model
+  model: 'claude-sonnet-4-5-20250929',
+  fallbackModel: 'claude-3-5-haiku-20241022',
+
+  // Limits
+  maxTurns: 10,
+  maxBudgetUsd: 1.00,
+  maxThinkingTokens: 10000,
+
+  // Prompts
+  systemPrompt: 'You are a helpful assistant.',
+
+  // Tools
+  tools: [myTool],
+  mcpServers: [myServer],
+  allowedTools: ['tool1', 'tool2'],
+  disallowedTools: ['dangerous_tool'],
+
+  // Session management
+  sessionId: 'existing-session-id',
+  forkSession: false,
+  continue: true,
+
+  // Output
+  outputFormat: { type: 'json_schema', schema: mySchema },
+
+  // Environment
+  env: { API_KEY: 'value' },
+  permissionMode: 'default',
+});
+```
+
+## Model Options
+
+### `model`
+
+The Claude model to use.
+
+```typescript
+model: 'claude-sonnet-4-5-20250929'
+```
+
+**Available models:**
+
+| Model | Description |
+|-------|-------------|
+| `claude-sonnet-4-5-20250929` | Fast, capable (recommended) |
+| `claude-opus-4-5-20251101` | Most powerful |
+| `claude-3-5-sonnet-20241022` | Previous Sonnet version |
+| `claude-3-5-haiku-20241022` | Fastest, cheapest |
+| `claude-3-opus-20240229` | Previous Opus version |
+
+**Shortcuts:**
+
+```typescript
+model: 'sonnet'  // claude-sonnet-4-5-20250929
+model: 'opus'    // claude-opus-4-5-20251101
+model: 'haiku'   // claude-3-5-haiku-20241022
+```
+
+### `fallbackModel`
+
+Model to use if primary model is unavailable or rate-limited.
+
+```typescript
+fallbackModel: 'claude-3-5-haiku-20241022'
+```
+
+---
+
+## Limit Options
+
+### `maxTurns`
+
+Maximum number of conversation turns (user message + assistant response = 1 turn).
+
+```typescript
+maxTurns: 10
+```
+
+When reached, session ends with a result indicating the limit was hit.
+
+### `maxBudgetUsd`
+
+Maximum spend for this session in USD.
+
+```typescript
+maxBudgetUsd: 1.00  // $1.00 limit
+```
+
+Throws `BudgetExceededError` when exceeded.
+
+### `maxThinkingTokens`
+
+Maximum tokens for Claude's extended thinking (if enabled).
+
+```typescript
+maxThinkingTokens: 10000
+```
+
+---
+
+## Prompt Options
+
+### `systemPrompt`
+
+Instructions that guide Claude's behavior. Can be a string or object.
+
+**String format:**
+
+```typescript
+systemPrompt: 'You are a helpful coding assistant.'
+```
+
+**Object format with preset:**
+
+```typescript
+systemPrompt: {
+  type: 'preset',
+  preset: 'claude_code',
+}
+```
+
+**Preset with custom append:**
+
+```typescript
+systemPrompt: {
+  type: 'preset',
+  preset: 'claude_code',
+  append: `
+## Additional Context
+Working directory: ${process.cwd()}
+User preferences: ${userPrefs}
+`,
+}
+```
+
+**Available presets:**
+
+| Preset | Description |
+|--------|-------------|
+| `claude_code` | Full Claude Code capabilities |
+| `assistant` | General assistant |
+| `coder` | Code-focused assistant |
+
+---
+
+## Tool Options
+
+### `tools`
+
+Array of tool definitions to make available to Claude.
+
+```typescript
+import { tool, textResult } from '@chucky.cloud/sdk';
+
+const myTool = tool(
+  'get_weather',
+  'Get weather for a city',
+  { type: 'object', properties: { city: { type: 'string' } } },
+  async ({ city }) => textResult(`Sunny in ${city}`)
+);
+
+const session = client.createSession({
+  tools: [myTool],
+});
+```
+
+### `mcpServers`
+
+Array of MCP server definitions containing multiple tools.
+
+```typescript
+import { McpServerBuilder, textResult } from '@chucky.cloud/sdk';
+
+const server = new McpServerBuilder('my-tools', '1.0.0')
+  .addTool({
+    name: 'tool1',
+    description: 'First tool',
+    inputSchema: { type: 'object', properties: {} },
+    handler: async () => textResult('Done'),
+  })
+  .addTool({
+    name: 'tool2',
+    description: 'Second tool',
+    inputSchema: { type: 'object', properties: {} },
+    handler: async () => textResult('Done'),
+  })
+  .build();
+
+const session = client.createSession({
+  mcpServers: [server],
+});
+```
+
+### `allowedTools`
+
+Whitelist of tool names Claude can use. If specified, only these tools are available.
+
+```typescript
+allowedTools: ['Read', 'Write', 'Bash']
+```
+
+### `disallowedTools`
+
+Blacklist of tool names Claude cannot use.
+
+```typescript
+disallowedTools: ['Bash', 'Write']  // Read-only mode
+```
+
+---
+
+## Session Management
+
+### `sessionId`
+
+Resume an existing session by ID.
+
+```typescript
+const session = client.createSession({
+  sessionId: 'sess_abc123...',
+});
+```
+
+### `forkSession`
+
+Create a copy of an existing session instead of resuming it.
+
+```typescript
+const session = client.createSession({
+  sessionId: 'sess_abc123...',
+  forkSession: true,  // Creates a new branch
+});
+```
+
+### `continue`
+
+Continue from where the previous session left off.
+
+```typescript
+const session = client.createSession({
+  sessionId: 'sess_abc123...',
+  continue: true,
+});
+```
+
+### `resumeSessionAt`
+
+Resume at a specific point in the conversation history.
+
+```typescript
+const session = client.createSession({
+  sessionId: 'sess_abc123...',
+  resumeSessionAt: 'conv_xyz789...',  // Conversation ID
+});
+```
+
+---
+
+## Output Options
+
+### `outputFormat`
+
+Force structured output using JSON Schema.
+
+```typescript
+const session = client.createSession({
+  outputFormat: {
+    type: 'json_schema',
+    schema: {
+      type: 'object',
+      properties: {
+        summary: { type: 'string' },
+        items: {
+          type: 'array',
+          items: { type: 'string' },
+        },
+      },
+      required: ['summary', 'items'],
+    },
+  },
+});
+```
+
+The final result will be valid JSON matching the schema.
+
+### `includePartialMessages`
+
+Include partial (streaming) messages in the message history.
+
+```typescript
+includePartialMessages: true
+```
+
+---
+
+## Environment Options
+
+### `env`
+
+Environment variables available to tools in the sandbox.
+
+```typescript
+env: {
+  API_KEY: 'sk-...',
+  DATABASE_URL: 'postgres://...',
+  DEBUG: 'true',
+}
+```
+
+### `permissionMode`
+
+How Claude handles permission requests for tools.
+
+```typescript
+permissionMode: 'default'
+```
+
+**Available modes:**
+
+| Mode | Description |
+|------|-------------|
+| `default` | Normal permission checking |
+| `plan` | Plan-based restrictions |
+| `bypassPermissions` | Skip all permission checks |
+
+### `allowDangerouslySkipPermissions`
+
+Enable bypass of all permission checks. Use with caution.
+
+```typescript
+allowDangerouslySkipPermissions: true
+```
+
+<Warning>
+Only use in trusted environments. This allows Claude to execute any tool without confirmation.
+</Warning>
+
+---
+
+## Agent Options
+
+### `agents`
+
+Define sub-agents that Claude can delegate to.
+
+```typescript
+agents: {
+  researcher: {
+    name: 'Researcher',
+    description: 'Searches and summarizes information',
+    tools: ['WebSearch', 'Read'],
+    model: 'claude-3-5-haiku-20241022',
+  },
+  coder: {
+    name: 'Coder',
+    description: 'Writes and edits code',
+    tools: ['Read', 'Write', 'Bash'],
+    model: 'claude-sonnet-4-5-20250929',
+  },
+}
+```
+
+---
+
+## Client Options
+
+Options passed when creating the `ChuckyClient`:
+
+```typescript
+const client = new ChuckyClient({
+  // Required
+  token: 'your-jwt-token',
+
+  // Optional
+  baseUrl: 'wss://conjure.chucky.cloud/ws',
+  debug: false,
+  timeout: 60000,
+  keepAliveInterval: 300000,
+  autoReconnect: false,
+  maxReconnectAttempts: 5,
+});
+```
+
+### `token`
+
+JWT token for authentication. **Required.**
+
+### `baseUrl`
+
+WebSocket endpoint URL. Override for staging/development.
+
+```typescript
+baseUrl: 'wss://staging.chucky.cloud/ws'
+```
+
+### `debug`
+
+Enable debug logging.
+
+```typescript
+debug: true
+```
+
+### `timeout`
+
+Connection timeout in milliseconds.
+
+```typescript
+timeout: 60000  // 60 seconds
+```
+
+### `keepAliveInterval`
+
+Interval for keep-alive pings in milliseconds.
+
+```typescript
+keepAliveInterval: 300000  // 5 minutes
+```
+
+### `autoReconnect`
+
+Automatically reconnect on connection loss.
+
+```typescript
+autoReconnect: true
+```
+
+### `maxReconnectAttempts`
+
+Maximum reconnection attempts before giving up.
+
+```typescript
+maxReconnectAttempts: 5
+```
+
+---
+
+## Type Definitions
+
+```typescript
+interface SessionOptions {
+  // Model
+  model?: Model;
+  fallbackModel?: Model;
+
+  // Limits
+  maxTurns?: number;
+  maxBudgetUsd?: number;
+  maxThinkingTokens?: number;
+
+  // Prompts
+  systemPrompt?: string | SystemPromptConfig;
+
+  // Tools
+  tools?: ToolDefinition[];
+  mcpServers?: McpServerDefinition[];
+  allowedTools?: string[];
+  disallowedTools?: string[];
+
+  // Session
+  sessionId?: string;
+  forkSession?: boolean;
+  continue?: boolean;
+  resumeSessionAt?: string;
+
+  // Output
+  outputFormat?: OutputFormat;
+  includePartialMessages?: boolean;
+
+  // Environment
+  env?: Record<string, string>;
+  permissionMode?: PermissionMode;
+  allowDangerouslySkipPermissions?: boolean;
+
+  // Agents
+  agents?: Record<string, AgentConfig>;
+}
+
+type Model =
+  | 'claude-sonnet-4-5-20250929'
+  | 'claude-opus-4-5-20251101'
+  | 'claude-3-5-sonnet-20241022'
+  | 'claude-3-5-haiku-20241022'
+  | 'claude-3-opus-20240229'
+  | 'sonnet'
+  | 'opus'
+  | 'haiku'
+  | string;
+
+type PermissionMode = 'default' | 'plan' | 'bypassPermissions';
+
+interface OutputFormat {
+  type: 'json_schema';
+  schema: object;
+}
+
+interface SystemPromptConfig {
+  type: 'preset';
+  preset: 'claude_code' | 'assistant' | 'coder';
+  append?: string;
+}
+```
+
+---
+
+## Examples
+
+### Minimal Session
+
+```typescript
+const session = client.createSession();
+await session.send('Hello');
+```
+
+### With Tools
+
+```typescript
+const session = client.createSession({
+  model: 'claude-sonnet-4-5-20250929',
+  mcpServers: [myToolServer],
+  maxTurns: 10,
+});
+```
+
+### Structured Output
+
+```typescript
+const session = client.createSession({
+  outputFormat: {
+    type: 'json_schema',
+    schema: {
+      type: 'object',
+      properties: {
+        answer: { type: 'string' },
+        confidence: { type: 'number' },
+      },
+    },
+  },
+});
+```
+
+### Resume Existing
+
+```typescript
+const session = client.createSession({
+  sessionId: previousSessionId,
+  continue: true,
+});
+```
+
+### Development Mode
+
+```typescript
+const session = client.createSession({
+  model: 'haiku',  // Faster, cheaper
+  debug: true,
+  maxBudgetUsd: 0.10,
+});
+```

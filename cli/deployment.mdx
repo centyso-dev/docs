@@ -1,0 +1,380 @@
+---
+title: Deployment
+description: Deploy your workspace to Chucky Cloud
+---
+
+# Deployment
+
+The `chucky deploy` command uploads your workspace to Chucky Cloud, making it available for AI agent execution.
+
+## Prerequisites
+
+Before deploying:
+1. **Logged in**: Run `chucky login` first
+2. **Project initialized**: Run `chucky init` in your project directory
+3. **Git repository**: Your project must be a git repository
+4. **Clean working tree**: Commit or stash changes (or use `--force`)
+
+## Basic Deployment
+
+```bash
+chucky deploy
+```
+
+This will:
+1. Create a tar.gz archive of your workspace (including `.git`)
+2. Upload to Chucky's R2 storage
+3. Sync any cron jobs defined in `.chucky.json`
+4. Output example code for generating tokens
+
+## Command Options
+
+```bash
+chucky deploy [options]
+```
+
+| Option | Description |
+|--------|-------------|
+| `--folder <path>` | Deploy a specific folder (default: current directory) |
+| `--force` | Auto-commit uncommitted changes before deploying |
+| `--json` | Output result as JSON |
+| `--quiet` | Minimal output |
+
+### Examples
+
+```bash
+# Deploy current directory
+chucky deploy
+
+# Deploy a subdirectory
+chucky deploy --folder ./packages/api
+
+# Force deploy with uncommitted changes
+chucky deploy --force
+
+# JSON output for CI/CD
+chucky deploy --json
+```
+
+---
+
+## Configuration Files
+
+### `.chucky.json` (Committed)
+
+Project configuration that's part of your codebase:
+
+```json
+{
+  "name": "my-project",
+  "description": "My awesome AI-powered project",
+  "folder": ".",
+  "crons": [
+    {
+      "cron": "0 9 * * 1-5",
+      "message": "Review open PRs and suggest improvements",
+      "timezone": "America/New_York",
+      "model": "claude-sonnet-4-5-20250929",
+      "maxTurns": 10,
+      "maxBudgetUsd": 5.00,
+      "systemPrompt": {
+        "type": "preset",
+        "preset": "claude_code"
+      },
+      "tools": {
+        "type": "preset",
+        "preset": "claude_code"
+      }
+    }
+  ]
+}
+```
+
+### Configuration Options
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `name` | `string` | Project display name |
+| `description` | `string` | Project description |
+| `folder` | `string` | Root folder for workspace (default: `.`) |
+| `crons` | `array` | Scheduled job definitions |
+
+### Cron Job Options
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `cron` | `string` | Cron expression (e.g., `0 9 * * *`) |
+| `message` | `string` | Prompt to send |
+| `timezone` | `string` | IANA timezone (e.g., `America/New_York`) |
+| `model` | `string` | Model to use |
+| `maxTurns` | `number` | Maximum conversation turns |
+| `maxBudgetUsd` | `number` | Maximum budget for this job |
+| `systemPrompt` | `object` | System prompt configuration |
+| `tools` | `object` | Tool configuration |
+| `callback` | `object` | Webhook for job results |
+
+### `.chucky` (Git-ignored)
+
+Local binding that links your directory to a Chucky project:
+
+```json
+{
+  "projectId": "abc123-def456-..."
+}
+```
+
+This file is automatically created by `chucky init` and should be added to `.gitignore`. It allows different team members to bind to different projects (e.g., dev vs production).
+
+---
+
+## Environment Variables
+
+Override CLI configuration with environment variables:
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `CHUCKY_API_KEY` | Your API key (overrides `~/.chucky/config.json`) | - |
+| `CHUCKY_PORTAL_URL` | Portal API URL (for dev/staging) | Production URL |
+| `CHUCKY_WORKER_URL` | Worker URL for sessions/jobs | `https://conjure.chucky.cloud` |
+
+### Using in CI/CD
+
+```yaml
+# GitHub Actions example
+env:
+  CHUCKY_API_KEY: ${{ secrets.CHUCKY_API_KEY }}
+
+steps:
+  - uses: actions/checkout@v4
+  - run: npm install -g @chucky.cloud/cli
+  - run: chucky deploy --json
+```
+
+---
+
+## Deployment Workflow
+
+### What Gets Uploaded
+
+The deployment archive includes:
+- All files in the workspace folder
+- The `.git` directory (for history and branching)
+- Excluding: `.DS_Store`, `Thumbs.db`, `*.tgz`
+
+### What Happens After Upload
+
+1. **Archive stored**: Uploaded to R2 with presigned URL
+2. **Project updated**: Portal notified of new workspace version
+3. **Crons synced**: Jobs created/updated/deleted to match `.chucky.json`
+4. **Ready for use**: Sessions and jobs use the new workspace
+
+### Git Requirements
+
+Your workspace must be:
+- A git repository (has `.git` directory)
+- The root of its own repository (not nested in another repo)
+- Have a clean working tree (or use `--force`)
+
+```bash
+# If you have uncommitted changes:
+git add . && git commit -m "Pre-deploy commit"
+chucky deploy
+
+# Or let the CLI commit for you:
+chucky deploy --force
+```
+
+---
+
+## CI/CD Integration
+
+### GitHub Actions
+
+When you run `chucky init`, the CLI offers to create a GitHub Actions workflow:
+
+```yaml
+# .github/workflows/chucky-deploy.yml
+name: Deploy to Chucky
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Full history for git
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Chucky CLI
+        run: npm install -g @chucky.cloud/cli
+
+      - name: Deploy
+        env:
+          CHUCKY_API_KEY: ${{ secrets.CHUCKY_API_KEY }}
+        run: chucky deploy --json
+```
+
+### GitLab CI
+
+```yaml
+# .gitlab-ci.yml
+deploy:
+  stage: deploy
+  image: node:20
+  script:
+    - npm install -g @chucky.cloud/cli
+    - chucky deploy --json
+  variables:
+    CHUCKY_API_KEY: $CHUCKY_API_KEY
+  only:
+    - main
+```
+
+### Manual Deployment
+
+For manual deployments, ensure you're logged in:
+
+```bash
+# One-time setup
+chucky login
+
+# Deploy
+chucky deploy
+```
+
+---
+
+## Output
+
+### Interactive Output
+
+```
+✓ Creating archive...
+  Files: 1,234
+  Size: 12.3 MB
+
+✓ Uploading to Chucky...
+  Progress: 100%
+
+✓ Deployment complete!
+
+Project: my-project
+Workspace: ws_abc123...
+
+Cron jobs synced:
+  ✓ Daily PR review (0 9 * * 1-5)
+
+Generate tokens with:
+
+  import { createToken, createBudget } from '@chucky.cloud/sdk';
+
+  const token = await createToken({
+    userId: 'your-user-id',
+    projectId: 'abc123-...',
+    secret: process.env.CHUCKY_HMAC_SECRET,
+    budget: createBudget({
+      aiDollars: 1.00,
+      computeHours: 1,
+      window: 'day',
+    }),
+  });
+```
+
+### JSON Output
+
+```json
+{
+  "status": "deployed",
+  "project": {
+    "id": "abc123-...",
+    "name": "my-project"
+  },
+  "workspace": {
+    "id": "ws_abc123...",
+    "files": 1234,
+    "sizeBytes": 12912640
+  },
+  "crons": {
+    "created": 1,
+    "updated": 0,
+    "deleted": 0
+  }
+}
+```
+
+---
+
+## Troubleshooting
+
+### "Not a git repository"
+
+Your project folder must be a git repository:
+
+```bash
+git init
+git add .
+git commit -m "Initial commit"
+chucky deploy
+```
+
+### "Uncommitted changes"
+
+Either commit your changes or use `--force`:
+
+```bash
+# Option 1: Commit manually
+git add . && git commit -m "Changes"
+chucky deploy
+
+# Option 2: Let CLI commit
+chucky deploy --force
+```
+
+### "Nested repository"
+
+The deploy folder must be the root of its own git repository, not a subdirectory of another repo.
+
+### "Not logged in"
+
+Run `chucky login` first:
+
+```bash
+chucky login
+chucky deploy
+```
+
+### "Project not initialized"
+
+Run `chucky init` in your project directory:
+
+```bash
+chucky init
+chucky deploy
+```
+
+---
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Cron Jobs" icon="clock" href="/cli/cron">
+    Schedule recurring AI tasks
+  </Card>
+  <Card title="Jobs" icon="list-check" href="/cli/jobs">
+    Run background jobs
+  </Card>
+  <Card title="Prompt Command" icon="terminal" href="/cli/prompt">
+    Send prompts to your project
+  </Card>
+  <Card title="Git Bundles" icon="code-branch" href="/cli/bundles">
+    Sync changes back to local
+  </Card>
+</CardGroup>
