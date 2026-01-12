@@ -93,6 +93,67 @@ Chucky automatically routes requests based on the model name:
 
 ---
 
+## Environment Variables
+
+Configure Claude Code model behavior via environment variables passed to sessions:
+
+### Primary Model
+
+| Variable | Description |
+|----------|-------------|
+| `ANTHROPIC_MODEL` | Primary model for the session |
+
+```typescript
+const session = client.createSession({
+  env: {
+    ANTHROPIC_MODEL: 'claude-opus-4-5-20251101',
+  },
+});
+```
+
+### Model Aliases
+
+Override the default models for each alias tier:
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `ANTHROPIC_DEFAULT_OPUS_MODEL` | Model for `opus` alias | `claude-opus-4-5-20251101` |
+| `ANTHROPIC_DEFAULT_SONNET_MODEL` | Model for `sonnet` alias | `claude-sonnet-4-5-20250929` |
+| `ANTHROPIC_DEFAULT_HAIKU_MODEL` | Model for `haiku` alias and background tasks | `claude-haiku-4-5-20251001` |
+
+### Subagent Model
+
+| Variable | Description |
+|----------|-------------|
+| `CLAUDE_CODE_SUBAGENT_MODEL` | Model used for subagent/background tasks |
+
+```typescript
+const session = client.createSession({
+  env: {
+    ANTHROPIC_MODEL: 'claude-sonnet-4-5-20250929',
+    CLAUDE_CODE_SUBAGENT_MODEL: 'claude-haiku-4-5-20251001',
+    ANTHROPIC_DEFAULT_HAIKU_MODEL: 'or:mistralai/devstral-2512:free',
+  },
+});
+```
+
+### Prompt Caching
+
+Control prompt caching behavior:
+
+| Variable | Description |
+|----------|-------------|
+| `DISABLE_PROMPT_CACHING` | Set to `1` to disable all caching |
+| `DISABLE_PROMPT_CACHING_HAIKU` | Set to `1` to disable for Haiku |
+| `DISABLE_PROMPT_CACHING_SONNET` | Set to `1` to disable for Sonnet |
+| `DISABLE_PROMPT_CACHING_OPUS` | Set to `1` to disable for Opus |
+
+<Note>
+These environment variables are passed to the Claude Code sandbox and affect how models are selected for different tasks within a session.
+</Note>
+
+---
+
 ## Custom Pricing
 
 For OpenRouter and other non-standard models, you can configure custom pricing to ensure accurate cost tracking.
