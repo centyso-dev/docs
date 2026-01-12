@@ -43,8 +43,8 @@ Chucky is a platform that lets you integrate Claude into your applications with:
   <Card title="Custom Tools" icon="wrench">
     Define tools that Claude can call. Execute in browser or server context.
   </Card>
-  <Card title="Session Management" icon="comments">
-    Multi-turn conversations with automatic persistence. Resume sessions anytime.
+  <Card title="Multi-Provider" icon="layer-group">
+    Use Claude, OpenAI, or 100+ OpenRouter models. Configure behavior with environment variables.
   </Card>
 </CardGroup>
 
@@ -78,11 +78,13 @@ print(result.result)
 
 ## Supported Models
 
-| Model | Description | Best For |
-|-------|-------------|----------|
-| `claude-sonnet-4-5-20250929` | Fast, capable | Most use cases |
-| `claude-opus-4-5-20251101` | Most powerful | Complex reasoning |
-| `claude-3-5-haiku-20241022` | Fastest | Simple tasks, high volume |
+| Provider | Models | Best For |
+|----------|--------|----------|
+| **Anthropic** | Claude Opus, Sonnet, Haiku | Default, best quality |
+| **OpenAI** | GPT-4o, o1, o3 | Alternative provider |
+| **OpenRouter** | 100+ models | Cost optimization, variety |
+
+Configure models per-session with [environment variables](/concepts/models#environment-variables) like `ANTHROPIC_MODEL` and `CLAUDE_CODE_SUBAGENT_MODEL`.
 
 ## Next Steps
 
@@ -104,6 +106,9 @@ print(result.result)
 ## Popular Topics
 
 <CardGroup cols={3}>
+  <Card title="Models" icon="microchip" href="/concepts/models">
+    Multi-provider & env vars
+  </Card>
   <Card title="Tools" icon="wrench" href="/concepts/tools">
     Create custom tools
   </Card>
@@ -115,9 +120,6 @@ print(result.result)
   </Card>
   <Card title="Jobs" icon="clock" href="/cli/jobs">
     Background tasks
-  </Card>
-  <Card title="Possession Mode" icon="ghost" href="/cli/possession">
-    Local execution
   </Card>
   <Card title="Billing" icon="credit-card" href="/billing">
     Pricing and costs
