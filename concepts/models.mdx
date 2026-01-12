@@ -10,7 +10,7 @@ Chucky supports multiple AI providers, giving you flexibility to choose the best
 | Provider | Models | API Key Required |
 |----------|--------|------------------|
 | **Anthropic** | Claude Opus, Sonnet, Haiku | Yes (bring your own) |
-| **OpenAI** | GPT-4o, GPT-4, o1, o3 | Yes (bring your own) |
+| **OpenAI** | GPT-5.2, GPT-5, o3, o4 | Yes (bring your own) |
 | **OpenRouter** | 100+ models | Yes (bring your own) |
 
 ---
@@ -31,7 +31,7 @@ Use your own OpenAI API key for GPT models:
 
 ```typescript
 const session = client.createSession({
-  model: 'gpt-4o',  // Automatically routes to OpenAI
+  model: 'gpt-5.2',  // Automatically routes to OpenAI
 });
 ```
 
@@ -68,7 +68,7 @@ Chucky automatically routes requests based on the model name:
 |---------|----------|
 | `or:*` | OpenRouter (explicit) |
 | `claude-*` | Anthropic |
-| `gpt-*`, `o1*`, `o3*` | OpenAI |
+| `gpt-*`, `o1*`, `o3*`, `o4*` | OpenAI |
 | Everything else | OpenRouter (fallback) |
 
 ### Examples
@@ -79,8 +79,8 @@ Chucky automatically routes requests based on the model name:
 'claude-opus-4-5-20251101'    // → Anthropic
 
 // OpenAI
-'gpt-4o'                      // → OpenAI
-'o1-preview'                  // → OpenAI
+'gpt-5.2'                     // → OpenAI
+'o4-mini'                     // → OpenAI
 
 // OpenRouter (explicit)
 'or:mistralai/mistral-large'  // → OpenRouter
