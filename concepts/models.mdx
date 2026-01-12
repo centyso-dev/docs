@@ -150,21 +150,35 @@ For free OpenRouter models:
 
 ## Provider Configuration
 
-### Adding API Keys
+### Environment Variables
+
+Store your API keys securely as environment variables:
+
+| Variable | Description | Get it from |
+|----------|-------------|-------------|
+| `ANTHROPIC_API_KEY` | Claude models (Opus, Sonnet, Haiku) | [console.anthropic.com](https://console.anthropic.com) |
+| `OPENAI_API_KEY` | GPT models (GPT-4o, o1, o3) | [platform.openai.com](https://platform.openai.com) |
+| `OPENROUTER_API_KEY` | OpenRouter models (100+) | [openrouter.ai](https://openrouter.ai) |
+
+### Adding API Keys to Chucky
 
 In the portal at **Projects → [Your Project] → Settings**:
 
 <Steps>
   <Step title="Anthropic API Key">
-    Required for Claude models. Get one at [console.anthropic.com](https://console.anthropic.com).
+    Required for Claude models. Paste your `ANTHROPIC_API_KEY` (starts with `sk-ant-`).
   </Step>
   <Step title="OpenAI API Key">
-    Required for GPT models. Get one at [platform.openai.com](https://platform.openai.com).
+    Required for GPT models. Paste your `OPENAI_API_KEY` (starts with `sk-`).
   </Step>
   <Step title="OpenRouter API Key">
-    Required for OpenRouter models. Get one at [openrouter.ai](https://openrouter.ai).
+    Required for OpenRouter models. Paste your `OPENROUTER_API_KEY` (starts with `sk-or-`).
   </Step>
 </Steps>
+
+<Warning>
+API keys are stored encrypted and never exposed to clients. All AI requests are proxied through Chucky's infrastructure.
+</Warning>
 
 ### Custom OpenRouter Endpoint
 
