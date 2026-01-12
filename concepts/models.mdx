@@ -1,0 +1,246 @@
+---
+title: Models & Providers
+description: Use Claude, OpenAI, and OpenRouter models with Chucky
+---
+
+Chucky supports multiple AI providers, giving you flexibility to choose the best model for each task.
+
+## Supported Providers
+
+| Provider | Models | API Key Required |
+|----------|--------|------------------|
+| **Anthropic** | Claude Opus, Sonnet, Haiku | Optional (use yours or ours) |
+| **OpenAI** | GPT-4o, GPT-4, o1, o3 | Yes (bring your own) |
+| **OpenRouter** | 100+ models | Yes (bring your own) |
+
+---
+
+## Using Different Models
+
+### Anthropic (Default)
+
+```typescript
+const session = client.createSession({
+  model: 'claude-sonnet-4-5-20250929',
+});
+```
+
+### OpenAI
+
+Use your own OpenAI API key for GPT models:
+
+```typescript
+const session = client.createSession({
+  model: 'gpt-4o',  // Automatically routes to OpenAI
+});
+```
+
+<Note>
+Add your OpenAI API key in the project settings at [app.chucky.cloud](https://app.chucky.cloud).
+</Note>
+
+### OpenRouter
+
+Access 100+ models through OpenRouter using the `or:` prefix:
+
+```typescript
+const session = client.createSession({
+  model: 'or:mistralai/mistral-large',
+});
+
+// Or without prefix for unknown models (auto-detected)
+const session = client.createSession({
+  model: 'deepseek/deepseek-chat',  // Routes to OpenRouter
+});
+```
+
+<Note>
+Add your OpenRouter API key in the project settings. Get one at [openrouter.ai](https://openrouter.ai).
+</Note>
+
+---
+
+## Model Detection
+
+Chucky automatically routes requests based on the model name:
+
+| Pattern | Provider |
+|---------|----------|
+| `or:*` | OpenRouter (explicit) |
+| `claude-*` | Anthropic |
+| `gpt-*`, `o1*`, `o3*` | OpenAI |
+| Everything else | OpenRouter (fallback) |
+
+### Examples
+
+```typescript
+// Anthropic
+'claude-sonnet-4-5-20250929'  // → Anthropic
+'claude-opus-4-5-20251101'    // → Anthropic
+
+// OpenAI
+'gpt-4o'                      // → OpenAI
+'o1-preview'                  // → OpenAI
+
+// OpenRouter (explicit)
+'or:mistralai/mistral-large'  // → OpenRouter
+'or:google/gemini-pro'        // → OpenRouter
+
+// OpenRouter (auto-detected)
+'deepseek/deepseek-chat'      // → OpenRouter (unknown model)
+'meta-llama/llama-3-70b'      // → OpenRouter (unknown model)
+```
+
+---
+
+## Custom Pricing
+
+For OpenRouter and other non-standard models, you can configure custom pricing to ensure accurate cost tracking.
+
+### Why Custom Pricing?
+
+- OpenRouter models have varying prices
+- Some models are free (e.g., `mistralai/devstral-2512:free`)
+- Accurate billing for your users
+
+### Setting Up Custom Pricing
+
+1. Go to **Billing → Custom Pricing** in the portal
+2. Add pricing entries for models you use
+
+| Field | Description | Example |
+|-------|-------------|---------|
+| Model Pattern | Exact name or wildcard | `mistralai/*` |
+| Input Price | USD per 1M input tokens | `2.00` |
+| Output Price | USD per 1M output tokens | `6.00` |
+
+### Wildcard Patterns
+
+Use `/*` suffix to match all models from a provider:
+
+```
+mistralai/*           → All Mistral models
+meta-llama/*          → All Llama models
+deepseek/*            → All DeepSeek models
+```
+
+### Pricing Priority
+
+When calculating costs, Chucky checks in order:
+
+1. **Custom exact match** - Your pricing for the exact model name
+2. **Custom wildcard** - Your pricing matching `provider/*`
+3. **Built-in pricing** - Known Anthropic/OpenAI prices
+4. **Default fallback** - Sonnet-level pricing ($3/$15 per 1M tokens)
+
+<Warning>
+If you use free models without custom pricing, they'll be billed at the default rate. Add custom pricing with `$0` for free models.
+</Warning>
+
+### Example: Free Models
+
+For free OpenRouter models:
+
+| Model Pattern | Input Price | Output Price |
+|---------------|-------------|--------------|
+| `mistralai/devstral-2512:free` | `0` | `0` |
+| `meta-llama/llama-3-8b:free` | `0` | `0` |
+
+---
+
+## Provider Configuration
+
+### Adding API Keys
+
+In the portal at **Projects → [Your Project] → Settings**:
+
+<Steps>
+  <Step title="Anthropic API Key">
+    Optional. If not set, uses Chucky's shared key (costs pass through).
+  </Step>
+  <Step title="OpenAI API Key">
+    Required for GPT models. Get one at [platform.openai.com](https://platform.openai.com).
+  </Step>
+  <Step title="OpenRouter API Key">
+    Required for OpenRouter models. Get one at [openrouter.ai](https://openrouter.ai).
+  </Step>
+</Steps>
+
+### Custom OpenRouter Endpoint
+
+For self-hosted OpenRouter or compatible APIs:
+
+```
+Endpoint: https://your-openrouter-instance.com/api/v1
+```
+
+---
+
+## Model Recommendations
+
+| Use Case | Recommended Model | Why |
+|----------|-------------------|-----|
+| General coding | `claude-sonnet-4-5-20250929` | Best balance of speed/quality |
+| Complex reasoning | `claude-opus-4-5-20251101` | Highest capability |
+| High volume | `claude-3-5-haiku-20241022` | Fastest, cheapest |
+| Cost-sensitive | `or:deepseek/deepseek-chat` | Very cheap, good quality |
+| Free tier | `or:mistralai/devstral-2512:free` | No cost |
+
+---
+
+## Troubleshooting
+
+### "No API key configured"
+
+You're using a model that requires your own API key:
+
+```json
+{
+  "error": {
+    "type": "authentication_error",
+    "message": "No OpenRouter API key configured for issuer: xxx"
+  }
+}
+```
+
+**Fix:** Add the API key in project settings.
+
+### Model Not Found
+
+OpenRouter may not have the model:
+
+```json
+{
+  "error": {
+    "type": "api_error",
+    "message": "OpenRouter error: Model not found"
+  }
+}
+```
+
+**Fix:** Check model name at [openrouter.ai/models](https://openrouter.ai/models).
+
+### Unexpected Costs
+
+Model billed at default rate instead of actual price:
+
+**Fix:** Add custom pricing for the model in Billing → Custom Pricing.
+
+---
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Custom Pricing" icon="tag" href="/billing#custom-pricing">
+    Configure model pricing
+  </Card>
+  <Card title="Budget Management" icon="wallet" href="/advanced/budget-management">
+    Control costs per user
+  </Card>
+  <Card title="Sessions" icon="comments" href="/concepts/sessions">
+    Working with sessions
+  </Card>
+  <Card title="OpenRouter" icon="arrow-up-right" href="https://openrouter.ai/models">
+    Browse available models
+  </Card>
+</CardGroup>

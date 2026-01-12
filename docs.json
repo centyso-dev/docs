@@ -27,6 +27,7 @@
             "group": "Core Concepts",
             "pages": [
               "concepts/sessions",
+              "concepts/models",
               "concepts/tools",
               "concepts/mcp-servers",
               "concepts/streaming"

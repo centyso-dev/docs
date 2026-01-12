@@ -29,15 +29,17 @@ When you exceed plan limits:
 
 ### 1. AI Costs (Pass-Through)
 
-Claude API costs are passed through at Anthropic's rates. You pay exactly what Anthropic charges.
+AI costs are passed through at provider rates. You pay exactly what the provider charges.
 
 | Model | Input (per 1M tokens) | Output (per 1M tokens) |
 |-------|----------------------|------------------------|
 | Claude Sonnet 4.5 | $3.00 | $15.00 |
 | Claude Opus 4.5 | $15.00 | $75.00 |
 | Claude 3.5 Haiku | $0.25 | $1.25 |
+| GPT-4o | $2.50 | $10.00 |
+| OpenRouter models | Varies | [See pricing](#custom-model-pricing) |
 
-**Note:** Use your own Anthropic API key for direct billing to Anthropic.
+**Note:** Use your own API keys for direct billing to providers. See [Models & Providers](/concepts/models) for setup.
 
 ### 2. Compute Time
 
@@ -272,6 +274,60 @@ if (percentUsed > 80) {
   });
 }
 ```
+
+---
+
+## Custom Model Pricing
+
+When using OpenRouter or other third-party models, configure custom pricing for accurate cost tracking.
+
+### Why Configure Pricing?
+
+- **OpenRouter models** have varying prices not in our built-in database
+- **Free models** should be billed at $0, not the default rate
+- **Accurate user billing** requires correct cost calculations
+
+### Setting Up Custom Pricing
+
+Navigate to **Billing → Custom Pricing** in the [portal](https://app.chucky.cloud):
+
+<Steps>
+  <Step title="Add Model Pattern">
+    Enter the exact model name or use wildcards:
+    - `mistralai/mistral-large` - Exact match
+    - `mistralai/*` - All Mistral models
+  </Step>
+  <Step title="Set Prices">
+    Enter price per 1 million tokens in USD:
+    - Input: Cost for prompt tokens
+    - Output: Cost for completion tokens
+  </Step>
+  <Step title="Save">
+    Pricing is synced to all your projects automatically.
+  </Step>
+</Steps>
+
+### Pricing Lookup Order
+
+1. **Your custom pricing** (exact match)
+2. **Your custom pricing** (wildcard match)
+3. **Built-in pricing** (Anthropic/OpenAI models)
+4. **Default fallback** ($3/$15 per 1M tokens - Sonnet-level)
+
+### Example Configurations
+
+| Model Pattern | Input | Output | Description |
+|---------------|-------|--------|-------------|
+| `mistralai/devstral-2512:free` | $0 | $0 | Free model |
+| `mistralai/*` | $2 | $6 | All Mistral models |
+| `deepseek/deepseek-chat` | $0.14 | $0.28 | DeepSeek Chat |
+| `meta-llama/*` | $0.50 | $0.75 | All Llama models |
+
+<Warning>
+Without custom pricing, unknown models are billed at Sonnet-level rates ($3/$15). This may overcharge for cheap models or undercharge for expensive ones.
+</Warning>
+
+For more details, see [Models & Providers](/concepts/models).
 
 ---
 
