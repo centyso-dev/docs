@@ -1,0 +1,304 @@
+---
+title: Channeling API
+description: Anthropic-compatible API with Chucky JWT authentication
+---
+
+The Channeling API is a drop-in replacement for the Anthropic Messages API. Use your existing Anthropic SDK or HTTP calls, but authenticate with Chucky JWT tokens instead of Anthropic API keys.
+
+## Endpoint
+
+```
+https://channeling.chucky.cloud/v1/messages
+```
+
+<Note>
+Also available at `proxy.chucky.cloud` for backward compatibility.
+</Note>
+
+---
+
+## Authentication
+
+Replace the Anthropic API key with your Chucky JWT token in the `x-api-key` header:
+
+```bash
+curl -X POST https://channeling.chucky.cloud/v1/messages \
+  -H "x-api-key: YOUR_CHUCKY_JWT" \
+  -H "anthropic-version: 2023-06-01" \
+  -H "content-type: application/json" \
+  -d '{
+    "model": "claude-sonnet-4-5-20250929",
+    "max_tokens": 1024,
+    "messages": [
+      {"role": "user", "content": "Hello, Claude!"}
+    ]
+  }'
+```
+
+### Creating Tokens
+
+Tokens are created server-side with your HMAC secret:
+
+```typescript
+import { createToken, createBudget } from '@chucky.cloud/sdk';
+
+const token = await createToken({
+  userId: 'user-123',
+  projectId: process.env.CHUCKY_PROJECT_ID,
+  secret: process.env.CHUCKY_HMAC_SECRET,
+  budget: createBudget({
+    aiDollars: 5.00,
+    computeHours: 1,
+    window: 'day',
+  }),
+});
+```
+
+See [Authentication](/authentication) for full token creation guide.
+
+---
+
+## Supported Endpoints
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/v1/messages` | POST | Create a message (Anthropic Messages API) |
+
+### Request Format
+
+The request body follows the [Anthropic Messages API](https://docs.anthropic.com/en/api/messages) format exactly:
+
+```json
+{
+  "model": "claude-sonnet-4-5-20250929",
+  "max_tokens": 1024,
+  "messages": [
+    {"role": "user", "content": "Explain quantum computing"}
+  ],
+  "system": "You are a helpful assistant.",
+  "stream": false
+}
+```
+
+### Response Format
+
+Responses match the Anthropic API format:
+
+```json
+{
+  "id": "msg_01XFDUDYJgAACzvnptvVoYEL",
+  "type": "message",
+  "role": "assistant",
+  "content": [
+    {
+      "type": "text",
+      "text": "Quantum computing is..."
+    }
+  ],
+  "model": "claude-sonnet-4-5-20250929",
+  "stop_reason": "end_turn",
+  "usage": {
+    "input_tokens": 25,
+    "output_tokens": 150
+  }
+}
+```
+
+---
+
+## Streaming
+
+Enable streaming by setting `"stream": true`:
+
+```bash
+curl -X POST https://channeling.chucky.cloud/v1/messages \
+  -H "x-api-key: YOUR_CHUCKY_JWT" \
+  -H "anthropic-version: 2023-06-01" \
+  -H "content-type: application/json" \
+  -d '{
+    "model": "claude-sonnet-4-5-20250929",
+    "max_tokens": 1024,
+    "messages": [{"role": "user", "content": "Write a poem"}],
+    "stream": true
+  }'
+```
+
+Streaming uses Server-Sent Events (SSE) matching the Anthropic format.
+
+---
+
+## Multi-Provider Support
+
+The Channeling API supports multiple AI providers through model routing:
+
+### Anthropic (Default)
+
+```json
+{"model": "claude-sonnet-4-5-20250929"}
+{"model": "claude-opus-4-5-20251101"}
+{"model": "claude-3-5-haiku-20241022"}
+```
+
+### OpenAI
+
+```json
+{"model": "gpt-5.2"}
+{"model": "gpt-5"}
+{"model": "o4-mini"}
+```
+
+<Note>
+Requires OpenAI API key configured in your project settings.
+</Note>
+
+### OpenRouter
+
+Use the `or:` prefix for explicit routing, or any unknown model name:
+
+```json
+{"model": "or:mistralai/mistral-large"}
+{"model": "or:deepseek/deepseek-chat"}
+{"model": "or:mistralai/devstral-2512:free"}
+```
+
+<Note>
+Requires OpenRouter API key configured in your project settings.
+</Note>
+
+See [Models & Providers](/concepts/models) for full provider documentation.
+
+---
+
+## Using with Anthropic SDKs
+
+### TypeScript/JavaScript
+
+```typescript
+import Anthropic from '@anthropic-ai/sdk';
+
+const client = new Anthropic({
+  apiKey: CHUCKY_JWT_TOKEN,
+  baseURL: 'https://channeling.chucky.cloud',
+});
+
+const message = await client.messages.create({
+  model: 'claude-sonnet-4-5-20250929',
+  max_tokens: 1024,
+  messages: [{ role: 'user', content: 'Hello!' }],
+});
+```
+
+### Python
+
+```python
+import anthropic
+
+client = anthropic.Anthropic(
+    api_key=CHUCKY_JWT_TOKEN,
+    base_url='https://channeling.chucky.cloud',
+)
+
+message = client.messages.create(
+    model='claude-sonnet-4-5-20250929',
+    max_tokens=1024,
+    messages=[{'role': 'user', 'content': 'Hello!'}],
+)
+```
+
+---
+
+## Budget Enforcement
+
+The Channeling API enforces budgets embedded in JWT tokens:
+
+- **AI Budget**: Limits total AI spend per user
+- **Compute Budget**: Not applicable (no sandbox execution)
+
+When budget is exceeded, requests return a `429` error:
+
+```json
+{
+  "error": {
+    "type": "rate_limit_error",
+    "message": "AI budget exceeded for user"
+  }
+}
+```
+
+---
+
+## Cost Tracking
+
+Every request is tracked against the user's budget. Costs are calculated based on:
+
+1. Model used
+2. Input/output tokens
+3. [Custom pricing](/billing#custom-model-pricing) (if configured)
+
+View usage in the [dashboard](https://app.chucky.cloud).
+
+---
+
+## Use Cases
+
+### Direct API Access
+
+Use HTTP calls without the Chucky SDK:
+
+```bash
+# From any language or tool that can make HTTP requests
+curl -X POST https://channeling.chucky.cloud/v1/messages ...
+```
+
+### Existing Anthropic Integrations
+
+Point existing Anthropic SDK code to Chucky by changing the base URL:
+
+```typescript
+// Before
+const client = new Anthropic({ apiKey: ANTHROPIC_API_KEY });
+
+// After
+const client = new Anthropic({
+  apiKey: CHUCKY_JWT_TOKEN,
+  baseURL: 'https://channeling.chucky.cloud',
+});
+```
+
+### Third-Party Tools
+
+Any tool that supports custom Anthropic endpoints can use Channeling:
+
+- VS Code extensions
+- CLI tools
+- Automation platforms
+
+---
+
+## Error Handling
+
+| Status | Error Type | Description |
+|--------|------------|-------------|
+| 400 | `invalid_request_error` | Malformed request body |
+| 401 | `authentication_error` | Invalid or expired JWT |
+| 429 | `rate_limit_error` | Budget exceeded |
+| 500 | `api_error` | Upstream provider error |
+
+---
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Authentication" icon="key" href="/authentication">
+    Create JWT tokens with budgets
+  </Card>
+  <Card title="Models & Providers" icon="microchip" href="/concepts/models">
+    Configure multi-provider support
+  </Card>
+  <Card title="Billing" icon="credit-card" href="/billing">
+    Understand costs and pricing
+  </Card>
+  <Card title="Dashboard" icon="chart-line" href="https://app.chucky.cloud">
+    View usage and manage projects
+  </Card>
+</CardGroup>

@@ -112,6 +112,7 @@
             "group": "REST API",
             "pages": [
               "api/rest",
+              "api/channeling",
               "api/incubate"
             ]
           },
