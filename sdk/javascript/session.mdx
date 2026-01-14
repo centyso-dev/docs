@@ -29,11 +29,13 @@ const session = client.createSession({
 Send a message to Claude. Returns a Promise that resolves when the message is sent.
 Use `stream()` to receive the response.
 
+Supports both text-only messages and multimodal content (text + images + documents).
+
 ```typescript
-async send(message: string): Promise<void>
+async send(message: string | ContentBlock[]): Promise<void>
 ```
 
-#### Example
+#### Text Message
 
 ```typescript
 await session.send('What is the capital of France?');
@@ -46,6 +48,63 @@ for await (const msg of session.stream()) {
     console.log('Done:', msg.result);
   }
 }
+```
+
+#### With Image
+
+```typescript
+// Send an image with a question
+await session.send([
+  { type: 'text', text: 'What is in this image?' },
+  {
+    type: 'image',
+    source: {
+      type: 'base64',
+      media_type: 'image/png',
+      data: 'iVBORw0KGgoAAAANSUhEUgAA...' // base64-encoded image
+    }
+  }
+]);
+
+for await (const msg of session.stream()) {
+  if (msg.type === 'assistant') {
+    console.log(getAssistantText(msg));
+  }
+}
+```
+
+#### With Document (PDF)
+
+```typescript
+// Send a PDF for analysis
+await session.send([
+  { type: 'text', text: 'Summarize this document' },
+  {
+    type: 'document',
+    source: {
+      type: 'base64',
+      media_type: 'application/pdf',
+      data: 'JVBERi0xLjQKJeLj...' // base64-encoded PDF
+    }
+  }
+]);
+
+for await (const msg of session.stream()) {
+  if (msg.type === 'assistant') {
+    console.log(getAssistantText(msg));
+  }
+}
+```
+
+#### Multiple Attachments
+
+```typescript
+// Combine text, images, and documents
+await session.send([
+  { type: 'text', text: 'Compare these two documents and explain the differences' },
+  { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: doc1Base64 } },
+  { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: doc2Base64 } }
+]);
 ```
 
 ---

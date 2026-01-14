@@ -230,14 +230,33 @@ interface Message {
 ```typescript
 type ContentBlock =
   | TextBlock
+  | ImageBlock
+  | DocumentBlock
   | ToolUseBlock
   | ToolResultBlock
-  | ThinkingBlock
-  | ImageBlock;
+  | ThinkingBlock;
 
 interface TextBlock {
   type: 'text';
   text: string;
+}
+
+interface ImageBlock {
+  type: 'image';
+  source: {
+    type: 'base64';
+    media_type: string;  // e.g., 'image/png', 'image/jpeg'
+    data: string;
+  };
+}
+
+interface DocumentBlock {
+  type: 'document';
+  source: {
+    type: 'base64';
+    media_type: string;  // e.g., 'application/pdf'
+    data: string;
+  };
 }
 
 interface ToolUseBlock {
@@ -257,15 +276,6 @@ interface ToolResultBlock {
 interface ThinkingBlock {
   type: 'thinking';
   thinking: string;
-}
-
-interface ImageBlock {
-  type: 'image';
-  source: {
-    type: 'base64';
-    media_type: string;
-    data: string;
-  };
 }
 ```
 

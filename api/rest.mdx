@@ -283,6 +283,115 @@ data = response.json()
 print(data['result']['text'])
 ```
 
+---
+
+# Usage API
+
+Check current token usage against budget limits.
+
+## Endpoint
+
+```
+GET https://conjure.chucky.cloud/usage
+```
+
+## Request
+
+### Headers
+
+| Header | Required | Description |
+|--------|----------|-------------|
+| `Authorization` | Yes | Bearer token: `Bearer your-jwt-token` |
+
+## Response
+
+```json
+{
+  "user_id": "demo-user",
+  "issuer_id": "jd77az049xjwsv0pbjqbrkfjws7z5136",
+  "window": "day",
+  "window_start": "2026-01-14T00:00:00.000Z",
+  "allowed": true,
+  "ai": {
+    "used": 150000,
+    "remaining": 4850000,
+    "budget": 5000000
+  },
+  "compute": {
+    "used": 84,
+    "remaining": 359916,
+    "budget": 360000
+  }
+}
+```
+
+### Response Fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `user_id` | `string` | User ID from token (`sub` claim) |
+| `issuer_id` | `string` | Project ID from token (`iss` claim) |
+| `window` | `string` | Budget window: `hour`, `day`, `week`, or `month` |
+| `window_start` | `string` | ISO timestamp when current window started |
+| `allowed` | `boolean` | Whether the user can continue (within budget) |
+| `ai.used` | `number` | AI cost used in microdollars |
+| `ai.remaining` | `number` | AI cost remaining in microdollars |
+| `ai.budget` | `number` | Total AI budget in microdollars |
+| `compute.used` | `number` | Compute time used in seconds |
+| `compute.remaining` | `number` | Compute time remaining in seconds |
+| `compute.budget` | `number` | Total compute budget in seconds |
+
+<Note>
+  AI cost is tracked in **microdollars** (1 USD = 1,000,000 microdollars).
+  Compute time is tracked in **seconds**.
+</Note>
+
+## Examples
+
+### cURL
+
+```bash
+curl -H "Authorization: Bearer your-jwt-token" \
+  https://conjure.chucky.cloud/usage
+```
+
+### JavaScript
+
+```javascript
+const response = await fetch('https://conjure.chucky.cloud/usage', {
+  headers: {
+    'Authorization': `Bearer ${token}`
+  }
+});
+
+const usage = await response.json();
+
+// Check remaining budget
+console.log(`AI remaining: $${usage.ai.remaining / 1_000_000}`);
+console.log(`Compute remaining: ${usage.compute.remaining}s`);
+
+if (!usage.allowed) {
+  console.log('Budget exhausted!');
+}
+```
+
+### Python
+
+```python
+import requests
+
+response = requests.get(
+    'https://conjure.chucky.cloud/usage',
+    headers={'Authorization': f'Bearer {token}'}
+)
+
+usage = response.json()
+print(f"AI remaining: ${usage['ai']['remaining'] / 1_000_000:.2f}")
+print(f"Compute remaining: {usage['compute']['remaining']}s")
+```
+
+---
+
 ## Comparison: REST vs WebSocket
 
 | Feature | REST `/prompt` | WebSocket `/ws` |
