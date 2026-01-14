@@ -96,6 +96,11 @@ const token = await createToken({
 | `day` | Resets every 24 hours |
 | `week` | Resets every 7 days |
 | `month` | Resets on billing anchor |
+| `lifetime` | Never resets - one-time budget |
+
+<Note>
+Use `lifetime` for one-time tokens like trial credits or prepaid packages. Once consumed, the budget is exhausted permanently.
+</Note>
 
 ### Budget Exceeded Response
 

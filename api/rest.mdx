@@ -331,7 +331,7 @@ GET https://conjure.chucky.cloud/usage
 |-------|------|-------------|
 | `user_id` | `string` | User ID from token (`sub` claim) |
 | `issuer_id` | `string` | Project ID from token (`iss` claim) |
-| `window` | `string` | Budget window: `hour`, `day`, `week`, or `month` |
+| `window` | `string` | Budget window: `hour`, `day`, `week`, `month`, or `lifetime` |
 | `window_start` | `string` | ISO timestamp when current window started |
 | `allowed` | `boolean` | Whether the user can continue (within budget) |
 | `ai.used` | `number` | AI cost used in microdollars |
