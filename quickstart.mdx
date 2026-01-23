@@ -1,589 +1,145 @@
 ---
 title: Quickstart
-description: Get up and running with Chucky SDK in 5 minutes
+description: Get Claude working in 5 minutes with a single TypeScript file
 ---
 
 # Quickstart
 
-This guide will help you integrate Claude into your application using the Chucky SDK.
+Get Claude working in your application with a single TypeScript file.
 
 ## Prerequisites
 
-- A Chucky account with a project created at [app.chucky.cloud](https://app.chucky.cloud)
-- Your **Project ID** and **HMAC Secret** (found in project settings)
-- Node.js 18+, Python 3.10+, Go 1.21+, or PHP 8.1+
+- Node.js 18 or later
+- A Chucky account ([sign up free](https://app.chucky.cloud))
+- Your **Project ID** and **HMAC Secret** from [project settings](https://app.chucky.cloud/project/settings)
 
-## Installation
+## 1. Create Your Project
 
-<CodeGroup>
-```bash npm
+Create a new directory and install the SDK:
+
+```bash
+mkdir my-chucky-app && cd my-chucky-app
+npm init -y
 npm install @chucky.cloud/sdk
+npm install -D tsx typescript @types/node
 ```
 
-```bash yarn
-yarn add @chucky.cloud/sdk
+## 2. Set Your Credentials
+
+```bash
+export CHUCKY_PROJECT_ID="your-project-id"
+export CHUCKY_HMAC_SECRET="your-hmac-secret"
 ```
 
-```bash pnpm
-pnpm add @chucky.cloud/sdk
-```
+<Tip>Get these from your [project settings](https://app.chucky.cloud/project/settings)</Tip>
 
-```bash pip
-pip install chucky-sdk
-```
+## 3. Create quickstart.ts
 
-```bash poetry
-poetry add chucky-sdk
-```
+Create a file called `quickstart.ts`:
 
-```bash go
-go get github.com/chucky-cloud/chucky-sdk-go
-```
+```typescript
+import {
+  ChuckyClient,
+  createToken,
+  createBudget,
+  getResultText,
+} from '@chucky.cloud/sdk';
 
-```bash composer
-composer require chucky-cloud/sdk
-```
-</CodeGroup>
+// Verify environment variables
+const PROJECT_ID = process.env.CHUCKY_PROJECT_ID;
+const HMAC_SECRET = process.env.CHUCKY_HMAC_SECRET;
 
-## Step 1: Create a Token (Server-Side)
+if (!PROJECT_ID || !HMAC_SECRET) {
+  console.error('Error: Missing required environment variables.');
+  console.error('Please set CHUCKY_PROJECT_ID and CHUCKY_HMAC_SECRET');
+  console.error('Get these from: https://app.chucky.cloud/project/settings');
+  process.exit(1);
+}
 
-Tokens authenticate users and set their usage budgets. **Always create tokens on your server** - never expose your HMAC secret to clients.
+async function main() {
+  console.log('Connecting to Chucky...');
 
-<CodeGroup>
-```typescript TypeScript (Server)
-import { createToken, createBudget } from '@chucky.cloud/sdk';
-
-// Create a token for a user
-const token = await createToken({
-  userId: 'user-123',
-  projectId: process.env.CHUCKY_PROJECT_ID,  // From portal
-  secret: process.env.CHUCKY_HMAC_SECRET,    // From portal
-  expiresIn: 3600,                            // 1 hour
-  budget: createBudget({
-    aiDollars: 1.00,               // $1 AI budget
-    computeHours: 1,               // 1 hour compute
-    window: 'day',                 // Resets daily
-  }),
-});
-
-// Return token to client
-return { token };
-```
-
-```python Python (Server)
-from chucky import create_token, create_budget
-import os
-
-# Create a token for a user
-token = create_token(
-    user_id='user-123',
-    project_id=os.environ['CHUCKY_PROJECT_ID'],  # From portal
-    secret=os.environ['CHUCKY_HMAC_SECRET'],     # From portal
-    expires_in=3600,
-    budget=create_budget(
-        ai_dollars=1.00,
-        compute_hours=1,
-        window='day',
-    ),
-)
-
-# Return token to client
-return {'token': token}
-```
-
-```go Go (Server)
-import (
-    "os"
-    "time"
-    chucky "github.com/chucky-cloud/chucky-sdk-go"
-)
-
-// Create a token for a user
-token, err := chucky.CreateToken(chucky.CreateTokenOptions{
-    UserID:    "user-123",
-    ProjectID: os.Getenv("CHUCKY_PROJECT_ID"),  // From portal
-    Secret:    os.Getenv("CHUCKY_HMAC_SECRET"), // From portal
-    ExpiresIn: 3600,
-    Budget: chucky.CreateBudget(chucky.CreateBudgetOptions{
-        AIDollars:    1.00,
-        ComputeHours: 1,
-        Window:       chucky.BudgetWindowDay,
-        WindowStart:  time.Now(),
+  // Create a token (in production, do this server-side)
+  const token = await createToken({
+    userId: 'quickstart-user',
+    projectId: PROJECT_ID,
+    secret: HMAC_SECRET,
+    expiresIn: 3600, // 1 hour
+    budget: createBudget({
+      aiDollars: 1.0, // $1 budget
+      computeHours: 1,
+      window: 'day',
     }),
-})
+  });
 
-// Return token to client
-return map[string]string{"token": token}
-```
+  // Create the Chucky client
+  const client = new ChuckyClient({ token });
 
-```php PHP (Server)
-<?php
-use function ChuckyCloud\Sdk\Utils\createToken;
-use function ChuckyCloud\Sdk\Utils\createBudget;
-use ChuckyCloud\Sdk\Utils\CreateTokenOptions;
-use ChuckyCloud\Sdk\Utils\CreateBudgetOptions;
-use ChuckyCloud\Sdk\Types\BudgetWindow;
+  try {
+    // Send a prompt and get the result
+    const result = await client.prompt(
+      'What is 2 + 2? Answer with just the number.',
+      { model: 'claude-sonnet-4-5-20250929' }
+    );
 
-// Create a token for a user
-$token = createToken(new CreateTokenOptions(
-    userId: 'user-123',
-    projectId: $_ENV['CHUCKY_PROJECT_ID'],    // From portal
-    secret: $_ENV['CHUCKY_HMAC_SECRET'],      // From portal
-    expiresIn: 3600,
-    budget: createBudget(new CreateBudgetOptions(
-        aiDollars: 1.00,
-        computeHours: 1,
-        window: BudgetWindow::DAY,
-    )),
-));
-
-// Return token to client
-return ['token' => $token];
-```
-</CodeGroup>
-
-## Step 2: Use the SDK (Client-Side)
-
-Once your client has a token, they can use the SDK to interact with Claude.
-
-### Simple Prompt
-
-<CodeGroup>
-```typescript TypeScript
-import { ChuckyClient } from '@chucky.cloud/sdk';
-
-const client = new ChuckyClient({ token });
-
-// One-shot prompt
-const result = await client.prompt(
-  'What is the capital of France?',
-  { model: 'claude-sonnet-4-5-20250929' }
-);
-
-if (result.subtype === 'success') {
-  console.log(result.result); // "The capital of France is Paris."
-  console.log(result.total_cost_usd); // 0.0012
+    // Extract and print the result
+    const text = getResultText(result);
+    console.log('Claude:', text);
+    console.log('Done! Session completed.');
+  } catch (error) {
+    console.error('Error:', error);
+    throw error;
+  } finally {
+    // Always close the client to release resources
+    client.close();
+  }
 }
-```
 
-```python Python
-from chucky import Chucky
-
-client = Chucky(token=token)
-
-# One-shot prompt
-result = await client.prompt('What is the capital of France?')
-
-print(result.result)  # "The capital of France is Paris."
-print(result.total_cost_usd)  # 0.0012
-```
-
-```go Go
-import (
-    "context"
-    "fmt"
-    chucky "github.com/chucky-cloud/chucky-sdk-go"
-)
-
-client := chucky.NewClient(chucky.ClientOptions{Token: token})
-defer client.Close()
-
-session := client.CreateSession(&chucky.SessionOptions{
-    BaseOptions: chucky.BaseOptions{
-        Model:    chucky.ModelClaudeSonnet,
-        MaxTurns: 1,
-    },
-})
-defer session.Close()
-
-ctx := context.Background()
-session.Send(ctx, "What is the capital of France?")
-
-for msg := range session.Stream(ctx) {
-    if r, ok := msg.(*chucky.SDKResultMessage); ok {
-        fmt.Println(r.Result)       // "The capital of France is Paris."
-        fmt.Println(r.TotalCostUsd) // 0.0012
-    }
-}
-```
-
-```php PHP
-<?php
-use ChuckyCloud\Sdk\Client\ChuckyClient;
-use ChuckyCloud\Sdk\Types\ClientOptions;
-use ChuckyCloud\Sdk\Types\SessionOptions;
-use ChuckyCloud\Sdk\Types\Model;
-use ChuckyCloud\Sdk\Types\ResultMessage;
-
-$client = new ChuckyClient(new ClientOptions(token: $token));
-$session = $client->createSession(new SessionOptions(
-    model: Model::CLAUDE_SONNET,
-    maxTurns: 1,
-));
-
-$session->connect()->then(function () use ($session, $client) {
-    $session->send('What is the capital of France?')->then(function () use ($session, $client) {
-        $session->receive()->then(function ($msg) use ($session, $client) {
-            if ($msg instanceof ResultMessage) {
-                echo $msg->result . "\n";          // "The capital of France is Paris."
-                echo $msg->totalCostUsd . "\n";   // 0.0012
-                $session->close();
-                $client->stop();
-            }
-        });
-    });
+main().catch((error) => {
+  console.error('Fatal error:', error);
+  process.exit(1);
 });
-
-$client->run();
-```
-</CodeGroup>
-
-### Multi-Turn Conversation (V2 Interface)
-
-<CodeGroup>
-```typescript TypeScript
-import { ChuckyClient, getAssistantText } from '@chucky.cloud/sdk';
-
-const client = new ChuckyClient({ token });
-
-// Create a session
-const session = client.createSession({
-  model: 'claude-sonnet-4-5-20250929',
-  systemPrompt: 'You are a helpful geography tutor.',
-});
-
-// First message
-await session.send('What is the capital of France?');
-for await (const msg of session.stream()) {
-  if (msg.type === 'assistant') {
-    console.log(getAssistantText(msg)); // "The capital of France is Paris."
-  }
-  if (msg.type === 'result') {
-    console.log('Cost:', msg.total_cost_usd);
-  }
-}
-
-// Follow-up (Claude remembers context)
-await session.send('What about Germany?');
-for await (const msg of session.stream()) {
-  if (msg.type === 'assistant') {
-    console.log(getAssistantText(msg)); // "The capital of Germany is Berlin."
-  }
-}
-
-// Close when done
-session.close();
 ```
 
-```python Python
-async with client.session(system_prompt='You are a helpful geography tutor.') as session:
-    # First message
-    r1 = await session.send('What is the capital of France?')
-    print(r1.result)  # "The capital of France is Paris."
+## 4. Run It
 
-    # Follow-up (Claude remembers context)
-    r2 = await session.send('What about Germany?')
-    print(r2.result)  # "The capital of Germany is Berlin."
+```bash
+npx tsx quickstart.ts
 ```
 
-```go Go
-client := chucky.NewClient(chucky.ClientOptions{Token: token})
-defer client.Close()
+### Expected Output
 
-session := client.CreateSession(&chucky.SessionOptions{
-    BaseOptions: chucky.BaseOptions{
-        Model:        chucky.ModelClaudeSonnet,
-        SystemPrompt: "You are a helpful geography tutor.",
-    },
-})
-defer session.Close()
+<Note>
+Output below is representative. Actual Claude responses and timing will vary based on the model's response.
+</Note>
 
-ctx := context.Background()
-
-// First message
-session.Send(ctx, "What is the capital of France?")
-for msg := range session.Stream(ctx) {
-    if m, ok := msg.(*chucky.SDKAssistantMessage); ok {
-        fmt.Println(chucky.GetAssistantText(m)) // "The capital of France is Paris."
-    }
-    if _, ok := msg.(*chucky.SDKResultMessage); ok {
-        break
-    }
-}
-
-// Follow-up (Claude remembers context)
-session.Send(ctx, "What about Germany?")
-for msg := range session.Stream(ctx) {
-    if m, ok := msg.(*chucky.SDKAssistantMessage); ok {
-        fmt.Println(chucky.GetAssistantText(m)) // "The capital of Germany is Berlin."
-    }
-    if _, ok := msg.(*chucky.SDKResultMessage); ok {
-        break
-    }
-}
+```
+Connecting to Chucky...
+Claude: 4
+Done! Session completed.
 ```
 
-```php PHP
-<?php
-use ChuckyCloud\Sdk\Client\ChuckyClient;
-use ChuckyCloud\Sdk\Types\ClientOptions;
-use ChuckyCloud\Sdk\Types\SessionOptions;
-use ChuckyCloud\Sdk\Types\Model;
-use ChuckyCloud\Sdk\Types\AssistantMessage;
-use ChuckyCloud\Sdk\Types\ResultMessage;
+## What Just Happened?
 
-$client = new ChuckyClient(new ClientOptions(token: $token));
-$session = $client->createSession(new SessionOptions(
-    model: Model::CLAUDE_SONNET,
-    systemPrompt: 'You are a helpful geography tutor.',
-));
-
-$session->connect()->then(function () use ($session, $client) {
-    // First message
-    $session->send('What is the capital of France?')->then(function () use ($session, $client) {
-        $receiveLoop = function () use (&$receiveLoop, $session, $client) {
-            $session->receive()->then(function ($msg) use (&$receiveLoop, $session, $client) {
-                if ($msg instanceof AssistantMessage) {
-                    echo $msg->getText() . "\n"; // "The capital of France is Paris."
-                }
-                if ($msg instanceof ResultMessage) {
-                    // Follow-up (Claude remembers context)
-                    $session->send('What about Germany?')->then(function () use ($session, $client) {
-                        $loop2 = function () use (&$loop2, $session, $client) {
-                            $session->receive()->then(function ($m) use (&$loop2, $session, $client) {
-                                if ($m instanceof AssistantMessage) {
-                                    echo $m->getText() . "\n"; // "The capital of Germany is Berlin."
-                                }
-                                if ($m instanceof ResultMessage) {
-                                    $session->close();
-                                    $client->stop();
-                                    return;
-                                }
-                                $loop2();
-                            });
-                        };
-                        $loop2();
-                    });
-                    return;
-                }
-                $receiveLoop();
-            });
-        };
-        $receiveLoop();
-    });
-});
-
-$client->run();
-```
-</CodeGroup>
-
-### Streaming Responses
-
-<CodeGroup>
-```typescript TypeScript
-import { ChuckyClient, getAssistantText } from '@chucky.cloud/sdk';
-
-const client = new ChuckyClient({ token });
-const session = client.createSession();
-
-await session.send('Write a haiku about coding');
-for await (const msg of session.stream()) {
-  if (msg.type === 'assistant') {
-    process.stdout.write(getAssistantText(msg) || '');
-  }
-  if (msg.type === 'result' && msg.subtype === 'success') {
-    console.log('\n\nFinal result:', msg.result);
-  }
-}
-
-session.close();
-```
-
-```python Python
-async for event in client.stream('Write a haiku about coding'):
-    if event.type == 'message':
-        print(event.data, end='')
-```
-</CodeGroup>
-
-## Step 3: Add Tools (Optional)
-
-Give Claude the ability to take actions in your application.
-
-<CodeGroup>
-```typescript TypeScript
-import { ChuckyClient, tool, getAssistantText } from '@chucky.cloud/sdk';
-
-// Define a tool
-const weatherTool = tool(
-  'get_weather',
-  'Get current weather for a city',
-  {
-    type: 'object',
-    properties: {
-      city: { type: 'string', description: 'City name' },
-    },
-    required: ['city'],
-  },
-  async ({ city }) => {
-    // Your implementation
-    const weather = await fetchWeather(city);
-    return { content: [{ type: 'text', text: `${city}: ${weather}` }] };
-  }
-);
-
-// Use tools in a session
-const client = new ChuckyClient({ token });
-const session = client.createSession({
-  tools: [weatherTool],
-});
-
-await session.send('What is the weather in Tokyo?');
-for await (const msg of session.stream()) {
-  if (msg.type === 'assistant') {
-    console.log(getAssistantText(msg));
-  }
-}
-// Claude will call get_weather, then respond with the result
-
-session.close();
-```
-
-```python Python
-from chucky import Chucky, tool, text_result
-
-@tool('get_weather', 'Get current weather for a city')
-async def get_weather(city: str) -> ToolResult:
-    """
-    Args:
-        city: City name
-    """
-    weather = await fetch_weather(city)
-    return text_result(f'{city}: {weather}')
-
-# Use tools in a prompt
-result = await client.prompt(
-    'What is the weather in Tokyo?',
-    tools=[get_weather],
-)
-```
-
-```go Go
-// Define a tool
-weatherTool := chucky.Tool(
-    "get_weather",
-    "Get current weather for a city",
-    chucky.NewSchema().
-        String("city", "City name").
-        Required("city").
-        Build(),
-    func(ctx context.Context, input map[string]interface{}) (*chucky.ToolResult, error) {
-        city := input["city"].(string)
-        weather := fetchWeather(city) // Your implementation
-        return chucky.TextResult(fmt.Sprintf("%s: %s", city, weather)), nil
-    },
-)
-
-// Create MCP server with tools
-mcpServer := chucky.NewMcpServer("weather").
-    Add(weatherTool).
-    Build()
-
-// Use tools in a session
-client := chucky.NewClient(chucky.ClientOptions{Token: token})
-session := client.CreateSession(&chucky.SessionOptions{
-    BaseOptions: chucky.BaseOptions{
-        McpServers: []chucky.McpServerDefinition{mcpServer},
-    },
-})
-
-session.Send(ctx, "What is the weather in Tokyo?")
-for msg := range session.Stream(ctx) {
-    if m, ok := msg.(*chucky.SDKAssistantMessage); ok {
-        fmt.Println(chucky.GetAssistantText(m))
-    }
-}
-// Claude will call get_weather, then respond with the result
-```
-
-```php PHP
-<?php
-use ChuckyCloud\Sdk\Client\ChuckyClient;
-use ChuckyCloud\Sdk\Types\ClientOptions;
-use ChuckyCloud\Sdk\Types\SessionOptions;
-use ChuckyCloud\Sdk\Types\Model;
-use ChuckyCloud\Sdk\Types\AssistantMessage;
-use ChuckyCloud\Sdk\Types\ResultMessage;
-
-use function ChuckyCloud\Sdk\Tools\tool;
-use function ChuckyCloud\Sdk\Tools\textResult;
-use function ChuckyCloud\Sdk\Tools\schema;
-use function ChuckyCloud\Sdk\Tools\mcpServer;
-
-// Define a tool
-$weatherTool = tool(
-    name: 'get_weather',
-    description: 'Get current weather for a city',
-    schema: schema()
-        ->string('city', 'City name')
-        ->required('city')
-        ->build(),
-    handler: function (array $input) {
-        $city = $input['city'];
-        $weather = fetchWeather($city); // Your implementation
-        return textResult("{$city}: {$weather}");
-    }
-);
-
-// Create MCP server with tools
-$mcpServer = mcpServer('weather')
-    ->addTool($weatherTool)
-    ->build();
-
-// Use tools in a session
-$client = new ChuckyClient(new ClientOptions(token: $token));
-$session = $client->createSession(new SessionOptions(
-    model: Model::CLAUDE_SONNET,
-    mcpServers: [$mcpServer],
-));
-
-$session->connect()->then(function () use ($session, $client) {
-    $session->send('What is the weather in Tokyo?')->then(function () use ($session, $client) {
-        $loop = function () use (&$loop, $session, $client) {
-            $session->receive()->then(function ($msg) use (&$loop, $session, $client) {
-                if ($msg instanceof AssistantMessage) {
-                    echo $msg->getText() . "\n";
-                }
-                if ($msg instanceof ResultMessage) {
-                    $session->close();
-                    $client->stop();
-                    return;
-                }
-                $loop();
-            });
-        };
-        $loop();
-    });
-});
-
-$client->run();
-// Claude will call get_weather, then respond with the result
-```
-</CodeGroup>
+1. **Token creation** - The `createToken()` function generates a JWT that authenticates your user and sets their budget limits
+2. **Client connection** - `ChuckyClient` connects to Chucky's secure WebSocket endpoint
+3. **Prompt execution** - `client.prompt()` sends your message to Claude and returns the complete response
+4. **Result extraction** - `getResultText()` extracts the text response from the result object
+5. **Clean shutdown** - `client.close()` properly closes the connection
 
 ## Next Steps
 
 <CardGroup cols={2}>
-  <Card title="Authentication" icon="key" href="/authentication">
-    Learn about token options and budget management
+  <Card title="Multi-turn Conversations" icon="comments" href="/concepts/sessions">
+    Build interactive chat experiences with session memory
   </Card>
-  <Card title="Sessions" icon="comments" href="/concepts/sessions">
-    Deep dive into multi-turn conversations
+  <Card title="Add Custom Tools" icon="wrench" href="/concepts/tools">
+    Let Claude interact with your APIs and services
   </Card>
-  <Card title="Tools" icon="wrench" href="/concepts/tools">
-    Create powerful custom tools
+  <Card title="Authentication Deep Dive" icon="key" href="/authentication">
+    Understand tokens, budgets, and security
   </Card>
-  <Card title="Error Handling" icon="triangle-exclamation" href="/advanced/error-handling">
-    Handle errors gracefully
+  <Card title="Other Languages" icon="code" href="/sdks">
+    Python, Go, and PHP SDK documentation
   </Card>
 </CardGroup>
