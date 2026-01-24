@@ -1,78 +1,62 @@
 ---
 title: Authentication
-description: Learn how to create and manage authentication tokens
+description: Get from "I need an API key" to a working authenticated request in 60 seconds
 ---
 
 # Authentication
 
-Chucky uses JWT (JSON Web Tokens) for authentication. Tokens are created server-side with your HMAC secret and include budget limits for each user.
+Chucky uses JWT tokens for authentication. Your server creates tokens with your HMAC secret; your client uses those tokens with the SDK. Answer one question to find your path.
 
-## Token Architecture
+## Which Path Should I Take?
 
-<Steps>
-  <Step title="Request Token">
-    Your client (browser) requests a token from your backend server
-  </Step>
-  <Step title="Create JWT">
-    Your server creates a JWT signed with your HMAC secret, including user ID and budget limits
-  </Step>
-  <Step title="Return Token">
-    Server returns the signed JWT to the client
-  </Step>
-  <Step title="Use SDK">
-    Client uses the token to connect to Chucky Cloud via the SDK
-  </Step>
-</Steps>
-
-<Warning>
-  **Never expose your HMAC secret** to clients. Always create tokens on your server.
-</Warning>
-
-## Creating Tokens
-
-### Basic Token
-
-Get your **Project ID** and **HMAC Secret** from your project settings at [app.chucky.cloud](https://app.chucky.cloud).
-
-<CodeGroup>
-```typescript TypeScript (Server)
-import { createToken, createBudget } from '@chucky.cloud/sdk';
-
-const token = await createToken({
-  userId: 'user-123',
-  projectId: process.env.CHUCKY_PROJECT_ID,  // From portal project settings
-  secret: process.env.CHUCKY_HMAC_SECRET,    // From portal project settings
-  budget: createBudget({
-    aiDollars: 1.00,
-    computeHours: 1,
-    window: 'day',
-  }),
-});
+```mermaid
+flowchart TD
+    Start[I need to authenticate] --> Q1{Where does your code run?}
+    Q1 -->|Server/Backend| Server["Go to Server-Side section"]
+    Q1 -->|Browser/Frontend| Client["Go to Client-Side section"]
+    Q1 -->|Both| Both["Go to Full-Stack section"]
 ```
 
-```python Python (Server)
-from chucky import create_token, create_budget
-import os
+---
 
-token = create_token(
-    user_id='user-123',
-    project_id=os.environ['CHUCKY_PROJECT_ID'],  # From portal project settings
-    secret=os.environ['CHUCKY_HMAC_SECRET'],     # From portal project settings
-    budget=create_budget(
-        ai_dollars=1.00,
-        compute_hours=1,
-        window='day',
-    ),
-)
-```
-</CodeGroup>
+## Server-Side: Create Tokens {#server-side}
 
-<Info>
-  The **Project ID** and **HMAC Secret** are separate values found in your project settings at [app.chucky.cloud](https://app.chucky.cloud).
-  The Project ID is used in JWT tokens, while the HMAC Secret is used for signing (never exposed in tokens).
-</Info>
+PLACEHOLDER - Server-side token creation code will be added in Plan 02-02.
 
-### Token Options
+---
+
+## Client-Side: Use Tokens {#client-side}
+
+PLACEHOLDER - Client-side token usage code will be added in Plan 02-02.
+
+---
+
+## Full-Stack: Both {#full-stack}
+
+PLACEHOLDER - Full-stack example combining server and client will be added in Plan 02-02.
+
+---
+
+## Deep Dive {#deep-dive}
+
+For advanced configuration and security details:
+
+<CardGroup cols={2}>
+  <Card title="Token Options" href="#token-options">
+    All parameters for createToken
+  </Card>
+  <Card title="Budget Configuration" href="#budget-configuration">
+    AI and compute budget limits
+  </Card>
+  <Card title="Token Permissions" href="#token-permissions">
+    Restrict tools, models, and turns
+  </Card>
+  <Card title="Best Practices" href="#best-practices">
+    Security recommendations
+  </Card>
+</CardGroup>
+
+### Token Options {#token-options}
 
 | Option | Type | Required | Description |
 |--------|------|----------|-------------|
@@ -84,27 +68,12 @@ token = create_token(
 | `permissions` | `object` | No | Optional permission constraints |
 | `sdkConfig` | `object` | No | SDK configuration overrides |
 
-## Budget Configuration
+### Budget Configuration {#budget-configuration}
 
-Budgets control how much each user can spend. Two types of limits:
+Budgets control how much each user can spend:
 
 - **AI Budget**: Cost limit for Claude API calls (in dollars)
 - **Compute Budget**: Time limit for sandbox execution (in hours)
-
-### Budget Helper
-
-```typescript
-import { createBudget } from '@chucky.cloud/sdk';
-
-const budget = createBudget({
-  aiDollars: 5.00,        // $5 AI budget
-  computeHours: 2,        // 2 hours compute
-  window: 'day',          // Reset window
-  windowStart: new Date() // Optional: when window started
-});
-```
-
-### Budget Windows
 
 | Window | Description |
 |--------|-------------|
@@ -113,48 +82,13 @@ const budget = createBudget({
 | `week` | Resets every 7 days |
 | `month` | Resets on billing anchor day |
 
-### Raw Budget Format
-
-If you need more control, you can specify the raw budget format:
-
-```typescript
-const token = await createToken({
-  userId: 'user-123',
-  projectId: process.env.CHUCKY_PROJECT_ID,
-  secret: process.env.CHUCKY_HMAC_SECRET,
-  budget: {
-    ai: 5_000_000,          // 5 USD in microdollars
-    compute: 7200,          // 2 hours in seconds
-    window: 'day',
-    windowStart: new Date().toISOString(),
-  },
-});
-```
-
 <Note>
-  AI budget is specified in **microdollars** (1 USD = 1,000,000 microdollars) for precision.
+  AI budget is specified in **microdollars** (1 USD = 1,000,000 microdollars) for precision in the raw format.
 </Note>
 
-## Token Permissions
+### Token Permissions {#token-permissions}
 
 Restrict what users can do with their token:
-
-```typescript
-const token = await createToken({
-  userId: 'user-123',
-  projectId: process.env.CHUCKY_PROJECT_ID,
-  secret: process.env.CHUCKY_HMAC_SECRET,
-  budget: createBudget({ aiDollars: 1, computeHours: 1, window: 'day' }),
-  permissions: {
-    tools: ['search', 'calculator'],    // Only these tools allowed
-    blockedTools: ['shell', 'write'],   // These tools blocked
-    maxTurns: 10,                        // Max conversation turns
-    model: 'claude-sonnet-4-5-20250929', // Force specific model
-  },
-});
-```
-
-### Permission Options
 
 | Option | Type | Description |
 |--------|------|-------------|
@@ -163,93 +97,11 @@ const token = await createToken({
 | `maxTurns` | `number` | Maximum conversation turns |
 | `model` | `string` | Force a specific model |
 
-## SDK Config Overrides
+### Best Practices {#best-practices}
 
-Override client-side SDK options from the token (server-enforced):
-
-```typescript
-const token = await createToken({
-  userId: 'user-123',
-  projectId: process.env.CHUCKY_PROJECT_ID,
-  secret: process.env.CHUCKY_HMAC_SECRET,
-  budget: createBudget({ aiDollars: 1, computeHours: 1, window: 'day' }),
-  sdkConfig: {
-    model: 'claude-sonnet-4-5-20250929',
-    systemPrompt: 'You are a helpful assistant.',
-    maxTurns: 5,
-    maxBudgetUsd: 0.50,
-    allowedTools: ['safe_tool'],
-    disallowedTools: ['dangerous_tool'],
-  },
-});
-```
-
-<Info>
-  SDK config overrides take precedence over any options passed by the client.
-</Info>
-
-## Token Utilities
-
-### Decode Token (No Verification)
-
-```typescript
-import { decodeToken } from '@chucky.cloud/sdk';
-
-const decoded = decodeToken(token);
-console.log(decoded.sub);    // User ID
-console.log(decoded.iss);    // Project ID
-console.log(decoded.budget); // Budget config
-```
-
-### Verify Token
-
-```typescript
-import { verifyToken } from '@chucky.cloud/sdk';
-
-const isValid = await verifyToken(token, process.env.HMAC_SECRET);
-if (!isValid) {
-  throw new Error('Invalid token signature');
-}
-```
-
-### Check Expiration
-
-```typescript
-import { isTokenExpired } from '@chucky.cloud/sdk';
-
-if (isTokenExpired(token)) {
-  // Token has expired, create a new one
-  const newToken = await createToken({ ... });
-}
-```
-
-## Token Payload Structure
-
-The JWT payload contains:
-
-```typescript
-interface TokenPayload {
-  // Standard JWT claims
-  sub: string;           // User ID
-  iss: string;           // Project/Issuer ID
-  exp: number;           // Expiry timestamp (Unix seconds)
-  iat: number;           // Issued at timestamp
-
-  // Chucky-specific
-  budget: {
-    ai: number;          // AI budget in microdollars
-    compute: number;     // Compute budget in seconds
-    window: string;      // Budget window type
-    windowStart: string; // ISO 8601 timestamp
-  };
-
-  // Optional
-  permissions?: { ... };
-  sdkConfig?: { ... };
-}
-```
-
-## Best Practices
+<Warning>
+  **Never expose your HMAC secret** to clients. Always create tokens on your server.
+</Warning>
 
 <AccordionGroup>
   <Accordion title="Short-lived tokens">
@@ -268,48 +120,3 @@ interface TokenPayload {
     Restrict tools and models based on user trust level. Free users might get limited tools, while premium users get full access.
   </Accordion>
 </AccordionGroup>
-
-## Example: Token Endpoint
-
-Here's a complete example of a token endpoint:
-
-```typescript
-// pages/api/token.ts (Next.js example)
-import { createToken, createBudget } from '@chucky.cloud/sdk';
-
-export async function POST(req: Request) {
-  // Verify user is authenticated (your auth system)
-  const user = await getCurrentUser(req);
-  if (!user) {
-    return new Response('Unauthorized', { status: 401 });
-  }
-
-  // Get user's tier for budget limits
-  const tier = user.subscriptionTier || 'free';
-  const budgets = {
-    free: { ai: 0.10, compute: 0.1 },
-    pro: { ai: 5.00, compute: 2 },
-    enterprise: { ai: 50.00, compute: 10 },
-  };
-
-  const { ai, compute } = budgets[tier];
-
-  const token = await createToken({
-    userId: user.id,
-    projectId: process.env.CHUCKY_PROJECT_ID,
-    secret: process.env.CHUCKY_HMAC_SECRET,
-    expiresIn: 3600,
-    budget: createBudget({
-      aiDollars: ai,
-      computeHours: compute,
-      window: 'day',
-    }),
-    permissions: tier === 'free' ? {
-      maxTurns: 5,
-      blockedTools: ['shell', 'write_file'],
-    } : undefined,
-  });
-
-  return Response.json({ token });
-}
-```
