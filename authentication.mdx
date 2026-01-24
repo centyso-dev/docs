@@ -72,7 +72,38 @@ Your token will be different - it contains your user ID and budget encoded as a 
 
 ## Client-Side: Use Tokens {#client-side}
 
-PLACEHOLDER - Client-side token usage code will be added in Plan 02-02.
+Use a token from your backend to connect to Chucky. The token contains budget limits - you don't need the HMAC secret.
+
+```typescript
+// use-token.ts - Run with: npx tsx use-token.ts
+import { ChuckyClient, getResultText } from '@chucky.cloud/sdk';
+
+const token = process.env.CHUCKY_TOKEN;
+
+if (!token) {
+  console.error('Set CHUCKY_TOKEN environment variable (from your backend)');
+  process.exit(1);
+}
+
+const client = new ChuckyClient({ token });
+
+const result = await client.prompt(
+  'What is 2 + 2?',
+  { model: 'claude-sonnet-4-5-20250929' }
+);
+
+console.log('Claude:', getResultText(result));
+client.close();
+```
+
+**Expected Output:**
+```
+Claude: 2 + 2 equals 4.
+```
+
+<Note>
+Claude's exact wording may vary, but the answer will be mathematically correct.
+</Note>
 
 ---
 
