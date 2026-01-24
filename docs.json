@@ -92,7 +92,7 @@
             ]
           },
           {
-            "group": "Go",
+            "group": "Go (Community)",
             "pages": [
               "sdk/go/client",
               "sdk/go/session",
@@ -100,7 +100,7 @@
             ]
           },
           {
-            "group": "PHP",
+            "group": "PHP (Community)",
             "pages": [
               "sdk/php/client",
               "sdk/php/session",
