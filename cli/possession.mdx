@@ -5,10 +5,10 @@ sidebarTitle: Possession Mode
 ---
 
 <Warning>
-**Possession mode gives Claude direct access to your local machine.** It can execute shell commands, read/write files, and modify your filesystem. Use with caution and only in trusted environments.
+**Possession Mode gives Claude direct access to your local machine.** It can execute shell commands, read/write files, and modify your filesystem. Use with caution and only in trusted environments.
 </Warning>
 
-Possession mode is a powerful feature that enables Claude (running in the Chucky sandbox) to control your local machine through host tools. This creates a unique "reverse proxy" pattern where:
+Possession Mode is a powerful feature that enables Claude (running in the Chucky sandbox) to control your local machine through host tools. This creates a unique "reverse proxy" pattern where:
 
 1. You send a prompt to Claude in the cloud
 2. Claude can call tools that execute **on your machine**
@@ -35,7 +35,7 @@ The `--dangerously-skip-permissions` flag is required to bypass Claude's built-i
 
 ## Available Host Tools
 
-When possession mode is enabled, Claude has access to these tools:
+When Possession Mode is enabled, Claude has access to these tools:
 
 ### HostBash
 
@@ -173,7 +173,7 @@ chucky prompt "Explore the project" \
 ## Security Considerations
 
 <Warning>
-Possession mode is powerful but potentially dangerous. Consider these precautions:
+Possession Mode is powerful but potentially dangerous. Consider these precautions:
 </Warning>
 
 1. **Use in isolated environments** - Consider running in a VM or container
