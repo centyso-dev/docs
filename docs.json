@@ -16,15 +16,13 @@
           {
             "group": "Getting Started",
             "pages": [
-              "index",
-              "why-chucky",
               "quickstart",
               "authentication",
-              "architecture"
+              "index"
             ]
           },
           {
-            "group": "Core Concepts",
+            "group": "Guides",
             "pages": [
               "concepts/sessions",
               "concepts/models",
@@ -64,6 +62,12 @@
               "advanced/budget-management",
               "advanced/workspace",
               "billing"
+            ]
+          },
+          {
+            "group": "Concepts",
+            "pages": [
+              "architecture"
             ]
           }
         ]
