@@ -21,7 +21,52 @@ flowchart TD
 
 ## Server-Side: Create Tokens {#server-side}
 
-PLACEHOLDER - Server-side token creation code will be added in Plan 02-02.
+Create tokens on your backend server using your HMAC secret. Never expose the secret to clients.
+
+<Warning>
+Your HMAC secret must stay on the server. Never include it in browser or mobile code.
+</Warning>
+
+<Tip>
+Get your **Project ID** and **HMAC Secret** from [app.chucky.cloud](https://app.chucky.cloud) project settings.
+</Tip>
+
+```typescript
+// create-token.ts - Run with: npx tsx create-token.ts
+import { createToken, createBudget } from '@chucky.cloud/sdk';
+
+const PROJECT_ID = process.env.CHUCKY_PROJECT_ID;
+const HMAC_SECRET = process.env.CHUCKY_HMAC_SECRET;
+
+if (!PROJECT_ID || !HMAC_SECRET) {
+  console.error('Set CHUCKY_PROJECT_ID and CHUCKY_HMAC_SECRET environment variables');
+  process.exit(1);
+}
+
+const token = await createToken({
+  userId: 'user-123',
+  projectId: PROJECT_ID,
+  secret: HMAC_SECRET,
+  expiresIn: 3600,
+  budget: createBudget({
+    aiDollars: 1.00,
+    computeHours: 1,
+    window: 'day',
+  }),
+});
+
+console.log('Token created:', token.substring(0, 30) + '...');
+// Return this token to your client
+```
+
+**Expected Output:**
+```
+Token created: eyJhbGciOiJIUzI1NiIsInR5cCI6...
+```
+
+<Note>
+Your token will be different - it contains your user ID and budget encoded as a JWT.
+</Note>
 
 ---
 
