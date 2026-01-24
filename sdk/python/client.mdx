@@ -3,6 +3,10 @@ title: Chucky Client
 description: Python SDK client reference
 ---
 
+<Note>
+**Status: Actively Maintained** - The Python SDK is actively maintained alongside the TypeScript SDK and provides full feature parity.
+</Note>
+
 # Chucky Client
 
 The main client class for interacting with Chucky in Python.
@@ -134,15 +138,14 @@ async for event in client.stream('Write a poem about coding'):
 
 ### create_session()
 
-Create a new conversation session.
+Create a new conversation session. Returns a `Session` immediately; connection happens on first `send()`.
 
 ```python
-async def create_session(
+def create_session(
     *,
     model: Optional[str] = None,
     system_prompt: Optional[str] = None,
     tools: Optional[List[Tool]] = None,
-    mcp_servers: Optional[Dict[str, McpServer]] = None,
     max_turns: Optional[int] = None,
 ) -> Session
 ```
@@ -150,39 +153,19 @@ async def create_session(
 #### Example
 
 ```python
-session = await client.create_session(
+# create_session is synchronous - returns Session immediately
+session = client.create_session(
     model='claude-sonnet-4-5-20250929',
     system_prompt='You are a math tutor.',
 )
 
-result = await session.send('What is calculus?')
-print(result.result)
-```
+# Connection happens on first send()
+await session.send('What is calculus?')
+async for msg in session.stream():
+    if msg.get('type') == 'result':
+        print(msg.get('result'))
 
----
-
-### session()
-
-Context manager for sessions (recommended).
-
-```python
-def session(
-    *,
-    model: Optional[str] = None,
-    system_prompt: Optional[str] = None,
-    tools: Optional[List[Tool]] = None,
-    mcp_servers: Optional[Dict[str, McpServer]] = None,
-) -> AsyncContextManager[Session]
-```
-
-#### Example
-
-```python
-async with client.session(system_prompt='You are helpful.') as session:
-    r1 = await session.send('Hi, I am Alice')
-    r2 = await session.send('What is my name?')
-    print(r2.result)  # "Your name is Alice."
-# Session automatically closed
+await session.close()
 ```
 
 ---
@@ -203,27 +186,39 @@ await client.close()
 
 ## Session Class
 
+The Session class provides a multi-turn conversation interface.
+
 ### Methods
 
 #### send()
 
-Send a message and wait for response.
+Send a message to the session. Use `stream()` to get the response.
 
 ```python
-async def send(message: str) -> SessionResult
+async def send(message: str) -> None
 ```
 
 #### stream()
 
-Send a message with streaming.
+Stream the response after sending a message.
 
 ```python
-async def stream(message: str) -> AsyncGenerator[StreamEvent, None]
+async def stream() -> AsyncIterator[Dict[str, Any]]
+```
+
+Returns an async iterator of SDK messages (dicts with `type`, `message`, etc.).
+
+#### receive()
+
+Alias for `stream()` for V2 SDK compatibility.
+
+```python
+async def receive() -> AsyncIterator[Dict[str, Any]]
 ```
 
 #### close()
 
-Close the session.
+Close the session and release resources.
 
 ```python
 async def close() -> None
@@ -237,80 +232,143 @@ The session's unique identifier.
 
 ```python
 @property
-def session_id(self) -> Optional[str]
+def session_id(self) -> str
 ```
 
-## Result Types
-
-### PromptResult
+### Session Example
 
 ```python
-@dataclass
-class PromptResult:
-    result: str                      # Response text
-    total_cost_usd: Optional[float]  # Total cost in USD
-    duration_secs: Optional[float]   # Response time
-    session_id: Optional[str]        # Session ID (if applicable)
+session = client.create_session(model='claude-sonnet-4-5-20250929')
+
+# First turn
+await session.send('Hello, I am Alice')
+async for msg in session.stream():
+    if msg.get('type') == 'assistant':
+        text = get_assistant_text(msg)
+        print(text)
+    if msg.get('type') == 'result':
+        break
+
+# Second turn - maintains conversation context
+await session.send('What is my name?')
+async for msg in session.stream():
+    if msg.get('type') == 'result':
+        print(msg.get('result'))  # "Your name is Alice."
+
+await session.close()
 ```
 
-### SessionResult
+## Message Types
+
+Messages are dictionaries matching the SDK protocol.
+
+### Result Message
 
 ```python
-@dataclass
-class SessionResult:
-    result: str
-    total_cost_usd: Optional[float]
-    duration_secs: Optional[float]
-    turn_count: Optional[int]
-    session_id: Optional[str]
+{
+    'type': 'result',
+    'subtype': 'success',  # or 'error'
+    'result': str,         # Final response text
+    'session_id': str,
+    'total_cost_usd': float,
+    'duration_ms': int,
+    'num_turns': int,
+}
 ```
 
-### StreamEvent
+### Assistant Message
+
+```python
+{
+    'type': 'assistant',
+    'message': {
+        'role': 'assistant',
+        'content': [
+            {'type': 'text', 'text': '...'},
+            {'type': 'tool_use', 'id': '...', 'name': '...', 'input': {...}},
+        ]
+    }
+}
+```
+
+### Helper Functions
+
+Use these helpers to extract text from messages:
+
+```python
+from chucky import get_assistant_text, get_result_text
+
+# Extract text from assistant message
+text = get_assistant_text(msg)  # Returns concatenated text blocks
+
+# Extract result from result message
+result = get_result_text(msg)  # Returns result string or None
+```
+
+### StreamEvent (Legacy)
+
+For the legacy `client.stream()` API:
 
 ```python
 @dataclass
 class StreamEvent:
-    type: str       # 'message', 'tool_use', 'tool_result', 'error'
-    data: Any       # Event-specific data
-    name: Optional[str]  # Tool name (for tool_use)
+    type: str   # 'message', 'result', 'error', 'done'
+    data: Any   # The message dict
 ```
 
 ## Complete Example
 
 ```python
 import asyncio
-from chucky import Chucky, tool, text_result
+from chucky import (
+    Chucky,
+    create_token,
+    create_budget,
+    tool,
+    text_result,
+    get_assistant_text,
+)
+
+# Create a token (server-side only)
+token = create_token(
+    user_id='user-123',
+    project_id='your-project-id',  # From app.chucky.cloud
+    secret='your-hmac-secret',     # From app.chucky.cloud
+    budget=create_budget(ai_dollars=1.00, compute_hours=1, window='day'),
+)
 
 # Define a tool
 @tool('get_time', 'Get current time')
-async def get_time() -> ToolResult:
+async def get_time() -> dict:
     from datetime import datetime
     return text_result(datetime.now().isoformat())
 
 async def main():
     # Create client
     client = Chucky(
-        token='your-jwt-token',
+        url='wss://conjure.chucky.cloud/ws',
+        token=token,
         model='claude-sonnet-4-5-20250929',
     )
 
     try:
         # Simple prompt
         result = await client.prompt('What is 2 + 2?')
-        print(f'Answer: {result.result}')
-        print(f'Cost: ${result.total_cost_usd:.4f}')
+        print(f"Answer: {result.get('result')}")
+        print(f"Cost: ${result.get('total_cost_usd', 0):.4f}")
 
-        # Streaming
-        print('\nStreaming response:')
-        async for event in client.stream('Tell me a joke'):
-            if event.type == 'message':
-                print(event.data, end='')
-        print()
+        # Multi-turn session with tools
+        session = client.create_session(tools=[get_time])
 
-        # Session with tools
-        async with client.session(tools=[get_time]) as session:
-            r = await session.send('What time is it?')
-            print(f'\nTime response: {r.result}')
+        await session.send('What time is it?')
+        async for msg in session.stream():
+            if msg.get('type') == 'assistant':
+                print(get_assistant_text(msg))
+            if msg.get('type') == 'result':
+                print(f"Done: {msg.get('result')}")
+                break
+
+        await session.close()
 
     finally:
         await client.close()
@@ -320,17 +378,33 @@ asyncio.run(main())
 
 ## Error Handling
 
-```python
-from chucky import Chucky, BudgetExceededError, AuthenticationError
+Errors are returned as result messages with `subtype: 'error'`:
 
-client = Chucky(token='...')
+```python
+from chucky import Chucky
+
+client = Chucky(url='wss://conjure.chucky.cloud/ws', token='...')
 
 try:
     result = await client.prompt('Hello')
-except BudgetExceededError as e:
-    print(f'Budget exceeded: {e}')
-except AuthenticationError as e:
-    print(f'Auth failed: {e}')
+    if result.get('subtype') == 'error':
+        print(f"Error: {result.get('result')}")
+    else:
+        print(result.get('result'))
+except RuntimeError as e:
+    # Connection errors, timeouts
+    print(f'Connection error: {e}')
 except Exception as e:
-    print(f'Error: {e}')
+    print(f'Unexpected error: {e}')
+```
+
+For streaming, check for error messages:
+
+```python
+session = client.create_session()
+await session.send('Hello')
+async for msg in session.stream():
+    if msg.get('type') == 'error':
+        print(f"Error: {msg.get('error', {}).get('message')}")
+        break
 ```
