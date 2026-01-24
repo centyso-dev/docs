@@ -7,29 +7,66 @@ description: Claude as a Service - Deploy AI agents with managed infrastructure
 
 Chucky provides **Claude as a Service** - a fully managed infrastructure for deploying AI agents powered by Claude. Build conversational AI applications without managing servers, handling authentication complexity, or worrying about scaling.
 
-## What is Chucky?
+## The Problem
 
-Chucky is a platform that lets you integrate Claude into your applications with:
+Building AI features into your product sounds simple: call the API, get a response, show it to users. But once you ship, reality hits:
 
-- **Managed Infrastructure**: Sandboxed execution environments running on Cloudflare's edge network
-- **Built-in Billing**: Per-user budget controls with real-time usage tracking
-- **Multi-language SDKs**: First-class support for JavaScript/TypeScript and Python
-- **Tool Execution**: Define custom tools that run on the server or in the browser
-- **Session Persistence**: Multi-turn conversations with automatic state management
+| Challenge | What You Need to Build | Time |
+|-----------|------------------------|------|
+| **Billing** | Usage tracking, budget limits, Stripe metering, usage-based billing | 2-4 weeks |
+| **Execution** | Sandboxed environments, file system isolation, process management | 4-8 weeks |
+| **Tools** | Tool execution routing, browser-to-server communication, error handling | 2-4 weeks |
+| **Sessions** | Persistence, context management, message history, resume logic | 1-2 weeks |
 
-## Architecture
+That's **9-18 weeks** of infrastructure work before you can ship your AI feature.
 
-<Steps>
-  <Step title="Your App">
-    Your application (browser or Node.js) connects via WebSocket
-  </Step>
-  <Step title="Chucky Cloud">
-    Edge network handles authentication, budgets, and session management
-  </Step>
-  <Step title="Claude API">
-    Requests are forwarded to Anthropic's Claude API
-  </Step>
-</Steps>
+## The Chucky Solution
+
+Chucky handles all of this with one SDK:
+
+```typescript
+// Billing, execution, tools, sessions - all handled.
+const client = new ChuckyClient({ token });
+const result = await client.prompt('Deploy my code to production');
+```
+
+**Built-in per-user billing:** JWT tokens carry budgets. Enforcement happens at the edge.
+
+```typescript
+const token = await createToken({
+  userId: 'user-123',
+  budget: createBudget({
+    aiDollars: 5.00,    // User can spend up to $5
+    computeHours: 1,    // And 1 hour of compute
+    window: 'day',      // Resets daily
+  }),
+});
+```
+
+When the budget runs out, requests stop. No surprise bills.
+
+## Comparison
+
+| Capability | Direct API | Chucky |
+|------------|-----------|--------|
+| Per-user billing | Build it yourself | Built-in |
+| Budget enforcement | Build it yourself | Automatic |
+| Code execution | Build it yourself | Managed sandbox |
+| File operations | Not available | Full access |
+| Shell commands | Not available | Full access |
+| Browser tools | Build it yourself | Native support |
+| Local execution | Build it yourself | Possession Mode |
+| Session persistence | Build it yourself | Automatic |
+| Multi-turn context | Build it yourself | Automatic |
+| Git integration | Build it yourself | Built-in bundles |
+
+## Who Uses Chucky
+
+**Agencies Billing Clients:** Deploy once, bill each client automatically. JWT tokens carry per-client budgets. No custom metering code per project.
+
+**SaaS Teams Adding AI:** Add AI features without building infrastructure. Set budgets per subscription tier. Ship in days, not months.
+
+**Indie Developers:** One SDK, one deployment. Focus on your product, not on building AI infrastructure.
 
 ## Key Features
 
@@ -48,34 +85,6 @@ Chucky is a platform that lets you integrate Claude into your applications with:
   </Card>
 </CardGroup>
 
-## Quick Example
-
-<CodeGroup>
-```typescript TypeScript
-import { ChuckyClient } from '@chucky.cloud/sdk';
-
-const client = new ChuckyClient({ token: 'your-jwt-token' });
-
-// Simple prompt
-const result = await client.prompt({
-  message: 'Explain quantum computing in simple terms',
-  model: 'claude-sonnet-4-5-20250929',
-});
-
-console.log(result.text);
-```
-
-```python Python
-from chucky import Chucky
-
-client = Chucky(token='your-jwt-token')
-
-# Simple prompt
-result = await client.prompt('Explain quantum computing in simple terms')
-print(result.result)
-```
-</CodeGroup>
-
 ## Supported Models
 
 | Provider | Models | Best For |
@@ -89,9 +98,6 @@ Configure models per-session with [environment variables](/concepts/models#envir
 ## Next Steps
 
 <CardGroup cols={2}>
-  <Card title="Why Chucky?" icon="circle-question" href="/why-chucky">
-    Understand the value proposition
-  </Card>
   <Card title="Quickstart" icon="rocket" href="/quickstart">
     Get up and running in 5 minutes
   </Card>
@@ -100,6 +106,9 @@ Configure models per-session with [environment variables](/concepts/models#envir
   </Card>
   <Card title="Use Cases" icon="lightbulb" href="/use-cases">
     Practical guides and recipes
+  </Card>
+  <Card title="Billing" icon="credit-card" href="/billing">
+    Pricing and budget controls
   </Card>
 </CardGroup>
 
@@ -121,7 +130,7 @@ Configure models per-session with [environment variables](/concepts/models#envir
   <Card title="Jobs" icon="clock" href="/cli/jobs">
     Background tasks
   </Card>
-  <Card title="Billing" icon="credit-card" href="/billing">
-    Pricing and costs
+  <Card title="Sessions" icon="comments" href="/concepts/sessions">
+    Multi-turn conversations
   </Card>
 </CardGroup>

@@ -1,9 +1,9 @@
 ---
-title: Sessions
+title: Run your first agent
 description: Multi-turn conversations with Claude
 ---
 
-# Sessions
+# Run your first agent
 
 Sessions enable multi-turn conversations where Claude remembers previous messages. Use sessions for chat interfaces, complex tasks requiring multiple steps, or any scenario where context matters.
 
@@ -44,6 +44,8 @@ session = await client.create_session(
 | `maxTurns` | `number` | Maximum conversation turns |
 | `maxBudgetUsd` | `number` | Budget limit for this session |
 | `sessionId` | `string` | Resume an existing session |
+
+For the complete API, see the [Session SDK Reference](/sdk/javascript/session).
 
 ## Sending Messages
 
