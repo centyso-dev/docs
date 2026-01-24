@@ -267,6 +267,34 @@ const session = client.createSession({
 });
 ```
 
+### `settingSources`
+
+Configure which setting sources to load configuration from.
+
+```typescript
+settingSources: ['user', 'project', 'local']
+```
+
+**Available sources:**
+
+| Source | Description |
+|--------|-------------|
+| `user` | User-level settings |
+| `project` | Project-level settings |
+| `local` | Local directory settings |
+
+### `jobId`
+
+Job ID for tracking background/deferred executions (used with the `/incubate` API).
+
+```typescript
+const session = client.createSession({
+  jobId: 'job_abc123...',
+});
+```
+
+This is useful when correlating sessions with external job tracking systems.
+
 ---
 
 ## Output Options
@@ -347,6 +375,16 @@ allowDangerouslySkipPermissions: true
 <Warning>
 Only use in trusted environments. This allows Claude to execute any tool without confirmation.
 </Warning>
+
+### `betas`
+
+Enable beta features.
+
+```typescript
+betas: ['extended_thinking', 'vision']
+```
+
+Beta features may change without notice. Check the Chucky changelog for available beta features.
 
 ---
 
@@ -475,6 +513,8 @@ interface SessionOptions {
   forkSession?: boolean;
   continue?: boolean;
   resumeSessionAt?: string;
+  settingSources?: Array<'user' | 'project' | 'local'>;
+  jobId?: string;
 
   // Output
   outputFormat?: OutputFormat;
@@ -484,6 +524,7 @@ interface SessionOptions {
   env?: Record<string, string>;
   permissionMode?: PermissionMode;
   allowDangerouslySkipPermissions?: boolean;
+  betas?: string[];
 
   // Agents
   agents?: Record<string, AgentConfig>;
