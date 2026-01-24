@@ -109,7 +109,21 @@ Claude's exact wording may vary, but the answer will be mathematically correct.
 
 ## Full-Stack: Both {#full-stack}
 
-PLACEHOLDER - Full-stack example combining server and client will be added in Plan 02-02.
+Building an app with a backend and frontend? Here's the complete flow:
+
+1. **Backend** creates a token (using HMAC secret)
+2. **Frontend** receives and uses the token (never sees secret)
+
+<CardGroup cols={2}>
+  <Card title="Server-Side" icon="server" href="#server-side">
+    Create tokens with your HMAC secret
+  </Card>
+  <Card title="Client-Side" icon="browser" href="#client-side">
+    Use tokens in browser or mobile
+  </Card>
+</CardGroup>
+
+For a production example with user tiers, see the [Next.js token endpoint example](/advanced/token-endpoint) in Advanced guides.
 
 ---
 
