@@ -1,0 +1,277 @@
+---
+title: Sessions API
+description: List, retrieve, and download session data
+---
+
+# Sessions API
+
+The Sessions API allows you to list completed sessions, retrieve their details, and download git bundles containing the conversation history and any files created during the session.
+
+<Note>
+  Sessions are automatically created when using `/prompt`, `/incubate`, or the WebSocket API. This API is for retrieving session data after execution.
+</Note>
+
+## Endpoints
+
+### List Sessions
+
+```
+GET https://conjure.chucky.cloud/sessions
+```
+
+List all sessions for your project with optional filters.
+
+#### Request
+
+```bash
+curl -H "Authorization: Bearer your-jwt-token" \
+  "https://conjure.chucky.cloud/sessions?limit=20&with_bundle=true"
+```
+
+#### Query Parameters
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `limit` | `number` | 20 | Maximum results (1-100) |
+| `offset` | `number` | 0 | Pagination offset |
+| `with_bundle` | `boolean` | false | Only return sessions with bundles |
+| `user_id` | `string` | - | Filter by user ID |
+| `job_id` | `string` | - | Filter by job ID |
+
+#### Response
+
+```json
+{
+  "sessions": [
+    {
+      "id": "sess_abc123",
+      "user_id": "user-1",
+      "job_id": "job_xyz789",
+      "claude_id": "claude-session-id",
+      "status": "completed",
+      "started_at": "2024-01-08T10:00:00.000Z",
+      "completed_at": "2024-01-08T10:00:30.000Z",
+      "duration_ms": 30000,
+      "total_cost_usd": 0.015,
+      "input_tokens": 500,
+      "output_tokens": 200,
+      "has_bundle": true,
+      "bundle_has_changes": true
+    }
+  ],
+  "pagination": {
+    "limit": 20,
+    "offset": 0,
+    "has_more": false
+  }
+}
+```
+
+#### Response Fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `id` | `string` | Unique session ID |
+| `user_id` | `string` | User who initiated the session |
+| `job_id` | `string \| null` | Associated job ID (if provided) |
+| `claude_id` | `string \| null` | Claude SDK session ID for resumption |
+| `status` | `string` | Session status (`running`, `completed`, `error`) |
+| `started_at` | `string` | ISO timestamp when session started |
+| `completed_at` | `string \| null` | ISO timestamp when session completed |
+| `duration_ms` | `number \| null` | Total execution time in milliseconds |
+| `total_cost_usd` | `number \| null` | Total AI cost in USD |
+| `input_tokens` | `number \| null` | Total input tokens used |
+| `output_tokens` | `number \| null` | Total output tokens used |
+| `has_bundle` | `boolean` | Whether a git bundle is available |
+| `bundle_has_changes` | `boolean` | Whether the bundle contains file changes |
+
+---
+
+### Get Session
+
+```
+GET https://conjure.chucky.cloud/sessions/{id}
+```
+
+Get details for a specific session.
+
+#### Request
+
+```bash
+curl -H "Authorization: Bearer your-jwt-token" \
+  "https://conjure.chucky.cloud/sessions/sess_abc123"
+```
+
+#### Response
+
+```json
+{
+  "id": "sess_abc123",
+  "user_id": "user-1",
+  "job_id": "job_xyz789",
+  "claude_id": "claude-session-id",
+  "status": "completed",
+  "started_at": "2024-01-08T10:00:00.000Z",
+  "completed_at": "2024-01-08T10:00:30.000Z",
+  "duration_ms": 30000,
+  "total_cost_usd": 0.015,
+  "input_tokens": 500,
+  "output_tokens": 200,
+  "has_bundle": true,
+  "bundle_r2_key": "bundles/proj123/sess_abc123.bundle",
+  "bundle_has_changes": true
+}
+```
+
+#### Error Responses
+
+**Session not found:**
+
+```json
+{
+  "error": "Session not found"
+}
+```
+
+Status: `404 Not Found`
+
+---
+
+### Download Bundle
+
+```
+GET https://conjure.chucky.cloud/sessions/{id}/bundle
+```
+
+Get a presigned URL to download the session's git bundle.
+
+<Note>
+  Git bundles contain the full conversation history and any files created or modified during the session.
+</Note>
+
+#### Request
+
+```bash
+curl -H "Authorization: Bearer your-jwt-token" \
+  "https://conjure.chucky.cloud/sessions/sess_abc123/bundle"
+```
+
+#### Response
+
+```json
+{
+  "session_id": "sess_abc123",
+  "bundle_url": "https://storage.chucky.cloud/bundles/...",
+  "expires_in": 300
+}
+```
+
+#### Response Fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `session_id` | `string` | Session ID |
+| `bundle_url` | `string` | Presigned URL for download |
+| `expires_in` | `number` | URL expiration in seconds (default: 300) |
+
+#### Error Responses
+
+**No bundle available:**
+
+```json
+{
+  "error": "No bundle available for this session"
+}
+```
+
+Status: `404 Not Found`
+
+---
+
+## Working with Bundles
+
+### Download and Extract
+
+```bash
+# Download the bundle
+curl -o session.bundle "$(curl -s -H "Authorization: Bearer $TOKEN" \
+  https://conjure.chucky.cloud/sessions/sess_abc123/bundle | jq -r .bundle_url)"
+
+# Create a new git repository from the bundle
+git clone session.bundle ./session-workspace
+```
+
+### Extract to Existing Repository
+
+```bash
+# Fetch the bundle into your repo
+git fetch session.bundle HEAD:refs/heads/session-branch
+
+# Checkout the session branch
+git checkout session-branch
+```
+
+### View Bundle Contents
+
+```bash
+# List refs in the bundle
+git bundle list-heads session.bundle
+
+# Verify bundle integrity
+git bundle verify session.bundle
+```
+
+---
+
+## Examples
+
+### JavaScript - List Recent Sessions
+
+```javascript
+const response = await fetch('https://conjure.chucky.cloud/sessions?limit=10', {
+  headers: {
+    'Authorization': `Bearer ${token}`,
+  },
+});
+
+const { sessions, pagination } = await response.json();
+
+for (const session of sessions) {
+  console.log(`${session.id}: ${session.status} ($${session.total_cost_usd})`);
+}
+```
+
+### Python - Download Session Bundle
+
+```python
+import requests
+
+# Get bundle URL
+response = requests.get(
+    f'https://conjure.chucky.cloud/sessions/{session_id}/bundle',
+    headers={'Authorization': f'Bearer {token}'}
+)
+bundle_info = response.json()
+
+# Download the bundle
+bundle_response = requests.get(bundle_info['bundle_url'])
+with open('session.bundle', 'wb') as f:
+    f.write(bundle_response.content)
+
+print(f"Downloaded bundle for session {session_id}")
+```
+
+### JavaScript - Filter by Job ID
+
+```javascript
+// Find all sessions for a specific job
+const response = await fetch(
+  `https://conjure.chucky.cloud/sessions?job_id=${jobId}&with_bundle=true`,
+  {
+    headers: { 'Authorization': `Bearer ${token}` },
+  }
+);
+
+const { sessions } = await response.json();
+console.log(`Found ${sessions.length} sessions for job ${jobId}`);
+```
