@@ -264,6 +264,49 @@ try {
 }
 ```
 
+## Timeout Errors
+
+```typescript
+try {
+  const result = await client.prompt({ message: 'Complex task...' });
+} catch (error) {
+  if (error instanceof TimeoutError) {
+    // error.details may contain:
+    // - operation: The operation that timed out (e.g., 'connect', 'send', 'response')
+    // - timeoutMs: The timeout threshold in milliseconds
+    // - elapsed: Actual time elapsed before timeout
+
+    const { operation, timeoutMs } = error.details || {};
+    console.error(`Operation "${operation}" timed out after ${timeoutMs}ms`);
+
+    // Consider retrying with a longer timeout or simpler request
+  }
+}
+```
+
+## Validation Errors
+
+```typescript
+try {
+  const result = await client.prompt({
+    message: '',  // Empty message
+    model: 'invalid-model'
+  });
+} catch (error) {
+  if (error instanceof ValidationError) {
+    // error.details may contain:
+    // - field: The field that failed validation
+    // - value: The invalid value provided
+    // - constraint: The constraint that was violated
+
+    const { field, constraint } = error.details || {};
+    console.error(`Validation failed for "${field}": ${constraint}`);
+
+    // Fix the input and retry
+  }
+}
+```
+
 ## Retry Strategies
 
 ### Simple Retry
