@@ -8,6 +8,16 @@
     "dark": "#C96A4F"
   },
   "favicon": "/favicon.ico",
+  "openapi": "openapi.yaml",
+  "api": {
+    "playground": {
+      "mode": "simple"
+    },
+    "baseUrl": [
+      "https://conjure.chucky.cloud",
+      "https://channeling.chucky.cloud"
+    ]
+  },
   "navigation": {
     "tabs": [
       {
