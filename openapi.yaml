@@ -1,0 +1,1214 @@
+openapi: 3.0.3
+info:
+  title: Chucky Cloud API
+  description: |
+    REST API for the Chucky Cloud platform. Execute AI prompts, manage sessions,
+    and integrate with Claude using JWT-authenticated endpoints.
+
+    ## Authentication
+
+    All endpoints require JWT authentication. Create tokens server-side using your HMAC secret:
+
+    ```typescript
+    import { createToken, createBudget } from '@chucky.cloud/sdk';
+
+    const token = await createToken({
+      userId: 'user-123',
+      projectId: process.env.CHUCKY_PROJECT_ID,
+      secret: process.env.CHUCKY_HMAC_SECRET,
+      budget: createBudget({ aiDollars: 5.00, computeHours: 1, window: 'day' }),
+    });
+    ```
+  version: 1.0.0
+  contact:
+    name: Chucky Cloud Support
+    email: support@chucky.cloud
+    url: https://docs.chucky.cloud
+  license:
+    name: Proprietary
+    url: https://chucky.cloud/terms
+
+servers:
+  - url: https://conjure.chucky.cloud
+    description: Conjure API (REST, Incubate, Sessions)
+  - url: https://channeling.chucky.cloud
+    description: Channeling API (Anthropic-compatible)
+
+tags:
+  - name: REST API
+    description: One-shot prompt execution and usage tracking
+  - name: Incubate API
+    description: Async/deferred prompt execution with concurrency control
+  - name: Sessions API
+    description: List, retrieve, and download session data
+  - name: Channeling API
+    description: Anthropic-compatible messages endpoint
+
+security:
+  - bearerAuth: []
+
+paths:
+  /prompt:
+    post:
+      operationId: prompt
+      summary: Execute one-shot prompt
+      description: |
+        Execute a one-shot prompt with Claude. Returns either a JSON response or
+        Server-Sent Events (SSE) stream based on the Accept header.
+      tags:
+        - REST API
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PromptRequest'
+            example:
+              message: "What is the capital of France?"
+              options:
+                token: "your-jwt-token"
+                model: "claude-sonnet-4-5-20250929"
+                systemPrompt: "You are a helpful assistant."
+                maxTurns: 5
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PromptResponse'
+              example:
+                result:
+                  type: result
+                  subtype: success
+                  text: "The capital of France is Paris."
+                  total_cost_usd: 0.0012
+                  duration_secs: 1.5
+                  usage:
+                    input_tokens: 50
+                    output_tokens: 20
+                messages:
+                  - type: assistant
+                    subtype: text
+                    text: "The capital of France is Paris."
+                  - type: result
+                    subtype: success
+                    text: "The capital of France is Paris."
+                    total_cost_usd: 0.0012
+                sessionId: "550e8400-e29b-41d4-a716-446655440000"
+            text/event-stream:
+              schema:
+                type: string
+              example: |
+                event: message
+                data: {"type":"assistant","subtype":"text","text":"The capital of "}
+
+                event: message
+                data: {"type":"assistant","subtype":"text","text":"France is Paris."}
+
+                event: done
+                data: {"sessionId":"550e8400-e29b-41d4-a716-446655440000"}
+        '401':
+          description: Authentication error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: "Token expired"
+        '402':
+          description: Developer budget exhausted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeveloperBudgetError'
+              example:
+                error: "developer_budget_exhausted"
+                used: 500000
+                available: 0
+                planSeconds: 500000
+                poolSeconds: 0
+        '429':
+          description: Budget exceeded or concurrency limit
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/UserBudgetError'
+                  - $ref: '#/components/schemas/ConcurrencyLimitError'
+              examples:
+                budgetExceeded:
+                  summary: User budget exhausted
+                  value:
+                    error: "user_budget_exhausted"
+                    ai:
+                      used: 1000000
+                      remaining: 0
+                      budget: 1000000
+                    compute:
+                      used: 3600
+                      remaining: 0
+                      budget: 3600
+                concurrencyLimit:
+                  summary: Concurrency limit reached
+                  value:
+                    error: "concurrent_limit_reached"
+                    active: 5
+                    max: 5
+                    sessions:
+                      - sessionId: "abc123"
+                        userId: "user1"
+                        ageMs: 45000
+
+  /usage:
+    get:
+      operationId: usage
+      summary: Check token usage
+      description: Check current token usage against budget limits.
+      tags:
+        - REST API
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Usage information
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UsageResponse'
+              example:
+                user_id: "demo-user"
+                issuer_id: "jd77az049xjwsv0pbjqbrkfjws7z5136"
+                window: "day"
+                window_start: "2026-01-14T00:00:00.000Z"
+                allowed: true
+                ai:
+                  used: 150000
+                  remaining: 4850000
+                  budget: 5000000
+                compute:
+                  used: 84
+                  remaining: 359916
+                  budget: 360000
+        '401':
+          description: Authentication error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /incubate:
+    post:
+      operationId: incubate
+      summary: Queue a prompt for deferred execution
+      description: |
+        Queue a prompt for async/deferred execution with optional scheduling
+        and webhook callbacks. Use for background jobs and scheduled tasks.
+      tags:
+        - Incubate API
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/IncubateRequest'
+            example:
+              message: "Generate a report from yesterday's data"
+              idempotencyKey: "report-2024-01-08"
+              options:
+                token: "your-jwt-token"
+                model: "claude-sonnet-4-5-20250929"
+                maxTurns: 10
+              ttl: 60
+              callback:
+                url: "https://your-server.com/webhook"
+                secret: "whsec_xxx"
+      responses:
+        '200':
+          description: Prompt queued successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IncubateResponse'
+              example:
+                vesselId: "run_abc123xyz"
+                idempotencyKey: "report-2024-01-08"
+                status: "queued"
+                scheduledFor: "2024-01-08T10:00:00.000Z"
+        '400':
+          description: Missing idempotency key
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: "missing_idempotency_key"
+                message: 'Request body must include "idempotencyKey" field'
+        '401':
+          description: Token expired
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: "token_expired"
+        '402':
+          description: Developer budget exhausted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: "developer_budget_exhausted"
+        '503':
+          description: Task queue unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: "trigger_failed"
+                message: "Task queue unavailable"
+
+  /incubate/vessel/{vesselId}:
+    get:
+      operationId: incubate-status
+      summary: Check status of queued prompt
+      description: Poll the status of a queued prompt by its vessel ID.
+      tags:
+        - Incubate API
+      parameters:
+        - name: vesselId
+          in: path
+          required: true
+          schema:
+            type: string
+          example: "run_abc123xyz"
+          description: The vessel ID returned when queueing the prompt
+      responses:
+        '200':
+          description: Vessel status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VesselStatus'
+              examples:
+                pending:
+                  summary: Pending execution
+                  value:
+                    vesselId: "run_abc123xyz"
+                    status: "QUEUED"
+                    taskIdentifier: "chucky-incubate"
+                    isCompleted: false
+                    isSuccess: false
+                    isFailed: false
+                    createdAt: "2024-01-08T10:00:00.000Z"
+                    updatedAt: "2024-01-08T10:00:01.000Z"
+                completed:
+                  summary: Completed successfully
+                  value:
+                    vesselId: "run_abc123xyz"
+                    status: "COMPLETED"
+                    taskIdentifier: "chucky-incubate"
+                    isCompleted: true
+                    isSuccess: true
+                    isFailed: false
+                    createdAt: "2024-01-08T10:00:00.000Z"
+                    updatedAt: "2024-01-08T10:00:30.000Z"
+                    startedAt: "2024-01-08T10:00:01.000Z"
+                    completedAt: "2024-01-08T10:00:30.000Z"
+                    output:
+                      success: true
+                      text: "Here is your generated report..."
+                      result:
+                        type: result
+                        subtype: success
+                        total_cost_usd: 0.015
+        '404':
+          description: Vessel not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: "Vessel not found"
+
+  /incubate/batch:
+    post:
+      operationId: incubate-batch
+      summary: Queue multiple prompts
+      description: Queue multiple prompts at once (max 100 items).
+      tags:
+        - Incubate API
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/IncubateBatchRequest'
+            example:
+              items:
+                - message: "Analyze document 1"
+                  idempotencyKey: "doc-1-analysis"
+                - message: "Analyze document 2"
+                  idempotencyKey: "doc-2-analysis"
+              options:
+                token: "your-jwt-token"
+                model: "claude-sonnet-4-5-20250929"
+              callback:
+                url: "https://your-server.com/webhook"
+      responses:
+        '200':
+          description: Batch queued successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IncubateBatchResponse'
+              example:
+                total: 2
+                queued: 2
+                failed: 0
+                items:
+                  - index: 0
+                    idempotencyKey: "doc-1-analysis"
+                    status: "queued"
+                    vesselId: "run_abc123"
+                  - index: 1
+                    idempotencyKey: "doc-2-analysis"
+                    status: "queued"
+                    vesselId: "run_def456"
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: "missing_idempotency_key"
+                message: 'Items must include "idempotencyKey" field'
+        '401':
+          description: Token expired
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: "token_expired"
+        '402':
+          description: Developer budget exhausted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: "developer_budget_exhausted"
+
+  /sessions:
+    get:
+      operationId: sessions-list
+      summary: List sessions
+      description: List all sessions for your project with optional filters.
+      tags:
+        - Sessions API
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+          description: Maximum results (1-100)
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+          description: Pagination offset
+        - name: with_bundle
+          in: query
+          schema:
+            type: boolean
+            default: false
+          description: Only return sessions with bundles
+        - name: user_id
+          in: query
+          schema:
+            type: string
+          description: Filter by user ID
+        - name: job_id
+          in: query
+          schema:
+            type: string
+          description: Filter by job ID
+      responses:
+        '200':
+          description: List of sessions
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionsListResponse'
+              example:
+                sessions:
+                  - id: "sess_abc123"
+                    user_id: "user-1"
+                    job_id: "job_xyz789"
+                    claude_id: "claude-session-id"
+                    status: "completed"
+                    started_at: "2024-01-08T10:00:00.000Z"
+                    completed_at: "2024-01-08T10:00:30.000Z"
+                    duration_ms: 30000
+                    total_cost_usd: 0.015
+                    input_tokens: 500
+                    output_tokens: 200
+                    has_bundle: true
+                    bundle_has_changes: true
+                pagination:
+                  limit: 20
+                  offset: 0
+                  has_more: false
+        '401':
+          description: Authentication error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /sessions/{id}:
+    get:
+      operationId: sessions-get
+      summary: Get session details
+      description: Get details for a specific session.
+      tags:
+        - Sessions API
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          example: "sess_abc123"
+          description: Session ID
+      responses:
+        '200':
+          description: Session details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Session'
+              example:
+                id: "sess_abc123"
+                user_id: "user-1"
+                job_id: "job_xyz789"
+                claude_id: "claude-session-id"
+                status: "completed"
+                started_at: "2024-01-08T10:00:00.000Z"
+                completed_at: "2024-01-08T10:00:30.000Z"
+                duration_ms: 30000
+                total_cost_usd: 0.015
+                input_tokens: 500
+                output_tokens: 200
+                has_bundle: true
+                bundle_r2_key: "bundles/proj123/sess_abc123.bundle"
+                bundle_has_changes: true
+        '401':
+          description: Authentication error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Session not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: "Session not found"
+
+  /sessions/{id}/bundle:
+    get:
+      operationId: sessions-bundle
+      summary: Get session bundle download URL
+      description: Get a presigned URL to download the session's git bundle.
+      tags:
+        - Sessions API
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          example: "sess_abc123"
+          description: Session ID
+      responses:
+        '200':
+          description: Bundle download information
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BundleResponse'
+              example:
+                session_id: "sess_abc123"
+                bundle_url: "https://storage.chucky.cloud/bundles/..."
+                expires_in: 300
+        '401':
+          description: Authentication error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: No bundle available
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: "No bundle available for this session"
+
+  /v1/messages:
+    post:
+      operationId: channeling-messages
+      summary: Create a message (Anthropic-compatible)
+      description: |
+        Drop-in replacement for the Anthropic Messages API. Use your existing
+        Anthropic SDK code, but authenticate with Chucky JWT tokens.
+
+        Supports multiple AI providers through model routing:
+        - Anthropic: `claude-sonnet-4-5-20250929`, `claude-opus-4-5-20251101`
+        - OpenAI: `gpt-5.2`, `gpt-5`, `o4-mini`
+        - OpenRouter: `or:mistralai/mistral-large`, `or:deepseek/deepseek-chat`
+      tags:
+        - Channeling API
+      servers:
+        - url: https://channeling.chucky.cloud
+          description: Channeling API
+      security:
+        - apiKeyAuth: []
+      parameters:
+        - name: anthropic-version
+          in: header
+          required: true
+          schema:
+            type: string
+            example: "2023-06-01"
+          description: Anthropic API version
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChannelingRequest'
+            example:
+              model: "claude-sonnet-4-5-20250929"
+              max_tokens: 1024
+              messages:
+                - role: user
+                  content: "Explain quantum computing"
+              system: "You are a helpful assistant."
+              stream: false
+      responses:
+        '200':
+          description: Message created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChannelingResponse'
+              example:
+                id: "msg_01XFDUDYJgAACzvnptvVoYEL"
+                type: message
+                role: assistant
+                content:
+                  - type: text
+                    text: "Quantum computing is..."
+                model: "claude-sonnet-4-5-20250929"
+                stop_reason: end_turn
+                usage:
+                  input_tokens: 25
+                  output_tokens: 150
+            text/event-stream:
+              schema:
+                type: string
+                description: Server-Sent Events stream when stream is true
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChannelingError'
+              example:
+                error:
+                  type: invalid_request_error
+                  message: "Malformed request body"
+        '401':
+          description: Authentication error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChannelingError'
+              example:
+                error:
+                  type: authentication_error
+                  message: "Invalid or expired JWT"
+        '429':
+          description: Budget exceeded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChannelingError'
+              example:
+                error:
+                  type: rate_limit_error
+                  message: "AI budget exceeded for user"
+        '500':
+          description: Upstream provider error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChannelingError'
+              example:
+                error:
+                  type: api_error
+                  message: "Upstream provider error"
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT token created with your HMAC secret
+    apiKeyAuth:
+      type: apiKey
+      in: header
+      name: x-api-key
+      description: JWT token for Channeling API (Anthropic-compatible)
+
+  schemas:
+    PromptRequest:
+      type: object
+      required:
+        - message
+        - options
+      properties:
+        message:
+          type: string
+          description: The prompt message to send to Claude
+        options:
+          $ref: '#/components/schemas/PromptOptions'
+
+    PromptOptions:
+      type: object
+      required:
+        - token
+      properties:
+        token:
+          type: string
+          description: JWT authentication token
+        model:
+          type: string
+          description: Claude model to use
+          default: "claude-sonnet-4-5-20250929"
+        systemPrompt:
+          type: string
+          description: System prompt for Claude
+        tools:
+          type: array
+          items:
+            type: object
+          description: Tool definitions
+        allowedTools:
+          type: array
+          items:
+            type: string
+          description: Whitelist of allowed tools
+        disallowedTools:
+          type: array
+          items:
+            type: string
+          description: Blacklist of blocked tools
+        maxTurns:
+          type: integer
+          description: Maximum conversation turns
+        maxBudgetUsd:
+          type: number
+          description: Maximum cost for this request in USD
+        maxThinkingTokens:
+          type: integer
+          description: Maximum tokens for extended thinking
+        outputFormat:
+          type: object
+          description: Structured output schema
+        mcpServers:
+          type: object
+          description: MCP server configurations
+
+    PromptResponse:
+      type: object
+      properties:
+        result:
+          $ref: '#/components/schemas/ResultMessage'
+        messages:
+          type: array
+          items:
+            type: object
+          description: All messages from the conversation
+        sessionId:
+          type: string
+          format: uuid
+          description: Session ID for this execution
+
+    ResultMessage:
+      type: object
+      properties:
+        type:
+          type: string
+          enum: [result]
+        subtype:
+          type: string
+          enum: [success, error]
+        text:
+          type: string
+          description: Final response text
+        total_cost_usd:
+          type: number
+          description: Total cost in USD
+        duration_secs:
+          type: number
+          description: Execution duration in seconds
+        usage:
+          $ref: '#/components/schemas/TokenUsage'
+
+    TokenUsage:
+      type: object
+      properties:
+        input_tokens:
+          type: integer
+          description: Number of input tokens used
+        output_tokens:
+          type: integer
+          description: Number of output tokens generated
+
+    UsageResponse:
+      type: object
+      properties:
+        user_id:
+          type: string
+          description: User ID from token (sub claim)
+        issuer_id:
+          type: string
+          description: Project ID from token (iss claim)
+        window:
+          type: string
+          enum: [hour, day, week, month, lifetime]
+          description: Budget window
+        window_start:
+          type: string
+          format: date-time
+          description: When current window started
+        allowed:
+          type: boolean
+          description: Whether the user can continue (within budget)
+        ai:
+          $ref: '#/components/schemas/BudgetInfo'
+        compute:
+          $ref: '#/components/schemas/BudgetInfo'
+
+    BudgetInfo:
+      type: object
+      properties:
+        used:
+          type: integer
+          description: Amount used (microdollars for AI, seconds for compute)
+        remaining:
+          type: integer
+          description: Amount remaining
+        budget:
+          type: integer
+          description: Total budget
+
+    IncubateRequest:
+      type: object
+      required:
+        - message
+        - idempotencyKey
+        - options
+      properties:
+        message:
+          type: string
+          description: The prompt message
+        idempotencyKey:
+          type: string
+          description: Unique key to prevent duplicates (per project)
+        options:
+          $ref: '#/components/schemas/PromptOptions'
+        ttl:
+          type: integer
+          description: Delay in seconds before execution
+        executeAt:
+          type: string
+          format: date-time
+          description: ISO 8601 timestamp for scheduled execution
+        callback:
+          $ref: '#/components/schemas/CallbackConfig'
+
+    CallbackConfig:
+      type: object
+      properties:
+        url:
+          type: string
+          format: uri
+          description: Webhook URL for result delivery
+        secret:
+          type: string
+          description: HMAC secret for signature verification
+
+    IncubateResponse:
+      type: object
+      properties:
+        vesselId:
+          type: string
+          description: Unique run ID for tracking
+        idempotencyKey:
+          type: string
+          description: The provided idempotency key
+        status:
+          type: string
+          enum: [queued]
+          description: Initial status
+        scheduledFor:
+          type: string
+          format: date-time
+          description: When the prompt is scheduled to execute
+
+    VesselStatus:
+      type: object
+      properties:
+        vesselId:
+          type: string
+          description: Unique run ID
+        status:
+          type: string
+          enum: [PENDING, QUEUED, EXECUTING, COMPLETED, FAILED, CANCELED]
+          description: Current execution status
+        taskIdentifier:
+          type: string
+          description: Task type identifier
+        isCompleted:
+          type: boolean
+          description: Whether execution is complete
+        isSuccess:
+          type: boolean
+          description: Whether completed successfully
+        isFailed:
+          type: boolean
+          description: Whether execution failed
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        startedAt:
+          type: string
+          format: date-time
+        completedAt:
+          type: string
+          format: date-time
+        output:
+          type: object
+          description: Result payload (only when isCompleted is true)
+          properties:
+            success:
+              type: boolean
+            text:
+              type: string
+            result:
+              type: object
+
+    IncubateBatchRequest:
+      type: object
+      required:
+        - items
+        - options
+      properties:
+        items:
+          type: array
+          maxItems: 100
+          items:
+            type: object
+            required:
+              - message
+              - idempotencyKey
+            properties:
+              message:
+                type: string
+              idempotencyKey:
+                type: string
+        options:
+          $ref: '#/components/schemas/PromptOptions'
+        callback:
+          $ref: '#/components/schemas/CallbackConfig'
+
+    IncubateBatchResponse:
+      type: object
+      properties:
+        total:
+          type: integer
+          description: Total items submitted
+        queued:
+          type: integer
+          description: Items successfully queued
+        failed:
+          type: integer
+          description: Items that failed to queue
+        items:
+          type: array
+          items:
+            type: object
+            properties:
+              index:
+                type: integer
+              idempotencyKey:
+                type: string
+              status:
+                type: string
+              vesselId:
+                type: string
+
+    SessionsListResponse:
+      type: object
+      properties:
+        sessions:
+          type: array
+          items:
+            $ref: '#/components/schemas/SessionSummary'
+        pagination:
+          type: object
+          properties:
+            limit:
+              type: integer
+            offset:
+              type: integer
+            has_more:
+              type: boolean
+
+    SessionSummary:
+      type: object
+      properties:
+        id:
+          type: string
+          description: Unique session ID
+        user_id:
+          type: string
+          description: User who initiated the session
+        job_id:
+          type: string
+          nullable: true
+          description: Associated job ID
+        claude_id:
+          type: string
+          nullable: true
+          description: Claude SDK session ID for resumption
+        status:
+          type: string
+          enum: [running, completed, error]
+          description: Session status
+        started_at:
+          type: string
+          format: date-time
+        completed_at:
+          type: string
+          format: date-time
+          nullable: true
+        duration_ms:
+          type: integer
+          nullable: true
+          description: Total execution time in milliseconds
+        total_cost_usd:
+          type: number
+          nullable: true
+          description: Total AI cost in USD
+        input_tokens:
+          type: integer
+          nullable: true
+        output_tokens:
+          type: integer
+          nullable: true
+        has_bundle:
+          type: boolean
+          description: Whether a git bundle is available
+        bundle_has_changes:
+          type: boolean
+          description: Whether the bundle contains file changes
+
+    Session:
+      allOf:
+        - $ref: '#/components/schemas/SessionSummary'
+        - type: object
+          properties:
+            bundle_r2_key:
+              type: string
+              description: R2 storage key for the bundle
+
+    BundleResponse:
+      type: object
+      properties:
+        session_id:
+          type: string
+          description: Session ID
+        bundle_url:
+          type: string
+          format: uri
+          description: Presigned URL for download
+        expires_in:
+          type: integer
+          description: URL expiration in seconds
+          default: 300
+
+    ChannelingRequest:
+      type: object
+      required:
+        - model
+        - max_tokens
+        - messages
+      properties:
+        model:
+          type: string
+          description: Model to use (supports Anthropic, OpenAI, OpenRouter)
+          example: "claude-sonnet-4-5-20250929"
+        max_tokens:
+          type: integer
+          description: Maximum tokens in response
+          example: 1024
+        messages:
+          type: array
+          items:
+            type: object
+            required:
+              - role
+              - content
+            properties:
+              role:
+                type: string
+                enum: [user, assistant]
+              content:
+                type: string
+        system:
+          type: string
+          description: System prompt
+        stream:
+          type: boolean
+          default: false
+          description: Enable streaming response
+
+    ChannelingResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          description: Message ID
+        type:
+          type: string
+          enum: [message]
+        role:
+          type: string
+          enum: [assistant]
+        content:
+          type: array
+          items:
+            type: object
+            properties:
+              type:
+                type: string
+                enum: [text]
+              text:
+                type: string
+        model:
+          type: string
+        stop_reason:
+          type: string
+          enum: [end_turn, max_tokens, stop_sequence]
+        usage:
+          $ref: '#/components/schemas/TokenUsage'
+
+    ChannelingError:
+      type: object
+      properties:
+        error:
+          type: object
+          properties:
+            type:
+              type: string
+              enum: [invalid_request_error, authentication_error, rate_limit_error, api_error]
+            message:
+              type: string
+
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+          description: Error code or message
+        message:
+          type: string
+          description: Human-readable error message
+
+    UserBudgetError:
+      type: object
+      properties:
+        error:
+          type: string
+          enum: [user_budget_exhausted]
+        ai:
+          $ref: '#/components/schemas/BudgetInfo'
+        compute:
+          $ref: '#/components/schemas/BudgetInfo'
+
+    DeveloperBudgetError:
+      type: object
+      properties:
+        error:
+          type: string
+          enum: [developer_budget_exhausted]
+        used:
+          type: integer
+        available:
+          type: integer
+        planSeconds:
+          type: integer
+        poolSeconds:
+          type: integer
+
+    ConcurrencyLimitError:
+      type: object
+      properties:
+        error:
+          type: string
+          enum: [concurrent_limit_reached]
+        active:
+          type: integer
+          description: Currently active sessions
+        max:
+          type: integer
+          description: Maximum allowed concurrent sessions
+        sessions:
+          type: array
+          items:
+            type: object
+            properties:
+              sessionId:
+                type: string
+              userId:
+                type: string
+              ageMs:
+                type: integer
+                description: Session age in milliseconds
